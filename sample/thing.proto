@@ -1,5 +1,5 @@
 message Thing {
-  required int32 foo = 1;
-  required int32 bar = 2;
-  required int32 abc = 3;
+  required uint32 foo = 1;
+  required uint32 bar = 2;
+  required uint32 abc = 3;
 }

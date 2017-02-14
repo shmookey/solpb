@@ -5,12 +5,12 @@ import qualified Data.ByteString.Lazy as B
 import Options.Applicative ((<>))
 import qualified Text.ProtocolBuffers.ProtoCompile.Parser as Parser
 import qualified Text.DescriptorProtos.FileDescriptorProto as Proto
-
+import Convert
+import Data.List (intercalate)
 
 data Options = Options
   { optInput :: String
   } deriving (Show)
-
 
 
 readCliOpts :: IO Options
@@ -25,6 +25,10 @@ readCliOpts =
           ( Opts.metavar "FILE"
          <> Opts.help    "Path to input file." )
 
+processDescriptor :: Proto.FileDescriptorProto -> String
+processDescriptor =
+  intercalate "\n" . Convert.convert
+
 main :: IO ()
 main = readCliOpts >>= \o ->
   let
@@ -33,5 +37,5 @@ main = readCliOpts >>= \o ->
     result <- Parser.parseProto input <$> B.readFile input
     putStrLn $ case result of
       Left e  -> show e
-      Right x -> show x
+      Right x -> processDescriptor x
 
