@@ -65,7 +65,7 @@ formatLibrary x@(Struct name fields) =
     printf "library %s {\n%s\n%s\n%s\n%s\n}" name struct statics decoder setters
 
 createSetters :: StructName -> [Field] -> [Setter]
-createSetters name = 
+createSetters name =
   let
    accumulate :: Map Type [Field] -> Field -> Map Type [Field]
    accumulate acc x@(Field i k t) = case Map.lookup t acc of
@@ -131,15 +131,43 @@ staticCode = "\
   \} \n\
   \\n\
   \function readVarInt(uint ptr, bytes data) constant returns (uint, uint) { \n\
-  \  return (0, ptr); \n\
+  \  uint x = 0; \n\
+  \  uint bytesUsed = 0; \n\
+  \  assembly { \n\
+  \    let b := 0 \n\
+  \    ptr   := add(input, ptr) \n\
+  \    loop : \n\
+  \      b         := byte(0, mload(ptr)) \n\
+  \      x         := or(x, mul(and(0x7f, b), exp(2, mul(7, bytesUsed)))) \n\
+  \      bytesUsed := add(bytesUsed, 1) \n\
+  \      ptr       := add(ptr, 0x01) \n\
+  \      jumpi(loop, eq(0x80, and(b, 0x80))) \n\
+  \  } \n\
+  \  return (x, bytesUsed); \n\
   \} \n\
   \\n\
   \function readUInt32(uint ptr, bytes data) constant returns (uint32) { \n\
-  \  return 0; \n\
+  \  return uint32(readUint(ptr, data, 4)); \n\
   \} \n\
   \\n\
   \function readUInt64(uint ptr, bytes data) constant returns (uint64) { \n\
-  \  return 0; \n\
+  \  return uint64(readUint(ptr, data, 8)); \n\
+  \} \n\
+  \\n\
+  \function readUint(uint ptr, bytes data, uint bytesLength) constant internal returns (uint) { \n\
+  \  uint x = 0; \n\
+  \  assembly { \n\
+  \    let i := 0 \n\
+  \    ptr   := add(data, ptr) \n\
+  \    loop : \n\
+  \      jumpi(end, eq(i, bytesLength)) \n\
+  \      x   := or(x, mul(byte(0, mload(ptr)), exp(2, mul(8, i)))) \n\
+  \      ptr := add(ptr, 0x01) \n\
+  \      i   := add(i, 1) \n\
+  \      jump(loop) \n\
+  \    end : \n\
+  \  } \n\
+  \  return x; \n\
   \} \n\
   \"
 
