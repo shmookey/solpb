@@ -80,94 +80,94 @@ indent n = unlines . map (spaces ++) . lines
 
 formatDecoder :: StructName -> String
 formatDecoder t = printf "\
-  \function decode%s(bytes data) internal constant returns (%s) { \n\
-  \  %s buf; \n\
-  \  \n\
+  \function decode%s(bytes data) internal constant returns (%s) {               \n\
+  \  %s buf;                                                                    \n\
+  \                                                                             \n\
   \  // The size of `data` and its first element are offset by a 256-bit length \n\
-  \  uint len = data.length + 32; \n\
-  \  uint ptr = 32; \n\
-  \  \n\
-  \  while (ptr < len) { \n\
-  \    var (fieldId, wireType, n) = readKey(ptr, data); \n\
-  \    ptr += n; \n\
-  \  \n\
-  \    if(wireType == WireType.Varint) { \n\
-  \      var (x1, sz) = readVarInt(ptr, data); \n\
-  \      ptr += sz; \n\
-  \      setField_uint(fieldId, x1, buf); \n\
-  \  \n\
-  \    } else if(wireType == WireType.Fixed64) { \n\
-  \      uint64 x2 = readUInt64(ptr, data); \n\
-  \      ptr += 8; \n\
-  \      setField_uint64(fieldId, x2, buf); \n\
-  \  \n\
-  \    } else if(wireType == WireType.LengthDelim) { \n\
-  \      throw; // Not implemented \n\
-  \  \n\
-  \    } else if(wireType == WireType.StartGroup) { \n\
-  \      throw; // Deprecated, not implemented\n\
-  \  \n\
-  \    } else if(wireType == WireType.EndGroup) { \n\
-  \      throw; // Deprecated, not implemented \n\
-  \  \n\
-  \    } else if(wireType == WireType.Fixed32) { \n\
-  \      uint32 x3 = readUInt32(ptr, data); \n\
-  \      ptr += 4; \n\
-  \      setField_uint32(fieldId, x3, buf); \n\
-  \    } \n\
-  \  } \n\
-  \  return buf; \n\
+  \  uint len = data.length + 32;                                               \n\
+  \  uint ptr = 32;                                                             \n\
+  \                                                                             \n\
+  \  while (ptr < len) {                                                        \n\
+  \    var (fieldId, wireType, n) = readKey(ptr, data);                         \n\
+  \    ptr += n;                                                                \n\
+  \                                                                             \n\
+  \    if(wireType == WireType.Varint) {                                        \n\
+  \      var (x1, sz) = readVarInt(ptr, data);                                  \n\
+  \      ptr += sz;                                                             \n\
+  \      setField_uint(fieldId, x1, buf);                                       \n\
+  \                                                                             \n\
+  \    } else if(wireType == WireType.Fixed64) {                                \n\
+  \      uint64 x2 = readUInt64(ptr, data);                                     \n\
+  \      ptr += 8;                                                              \n\
+  \      setField_uint64(fieldId, x2, buf);                                     \n\
+  \                                                                             \n\
+  \    } else if(wireType == WireType.LengthDelim) {                            \n\
+  \      throw; // Not implemented                                              \n\
+  \                                                                             \n\
+  \    } else if(wireType == WireType.StartGroup) {                             \n\
+  \      throw; // Deprecated, not implemented                                  \n\
+  \                                                                             \n\
+  \    } else if(wireType == WireType.EndGroup) {                               \n\
+  \      throw; // Deprecated, not implemented                                  \n\
+  \                                                                             \n\
+  \    } else if(wireType == WireType.Fixed32) {                                \n\
+  \      uint32 x3 = readUInt32(ptr, data);                                     \n\
+  \      ptr += 4;                                                              \n\
+  \      setField_uint32(fieldId, x3, buf);                                     \n\
+  \    }                                                                        \n\
+  \  }                                                                          \n\
+  \  return buf;                                                                \n\
   \}" t t t
 
 staticCode :: String
 staticCode = "\
-  \enum WireType { Varint, Fixed64, LengthDelim, StartGroup, EndGroup, Fixed32 } \n\
-  \\n\
-  \function readKey(uint ptr, bytes data) constant returns (uint, WireType, uint) { \n\
-  \  var (x, n) = readVarInt(ptr, data); \n\
-  \  WireType typeId  = WireType(x & 7); \n\
-  \  uint fieldId = x >> 3; \n\
-  \  return (fieldId, typeId, n); \n\
-  \} \n\
-  \\n\
-  \function readVarInt(uint ptr, bytes data) constant returns (uint, uint) { \n\
-  \  uint x = 0; \n\
-  \  uint bytesUsed = 0; \n\
-  \  assembly { \n\
-  \    let b := 0 \n\
-  \    ptr   := add(input, ptr) \n\
-  \    loop : \n\
-  \      b         := byte(0, mload(ptr)) \n\
-  \      x         := or(x, mul(and(0x7f, b), exp(2, mul(7, bytesUsed)))) \n\
-  \      bytesUsed := add(bytesUsed, 1) \n\
-  \      ptr       := add(ptr, 0x01) \n\
-  \      jumpi(loop, eq(0x80, and(b, 0x80))) \n\
-  \  } \n\
-  \  return (x, bytesUsed); \n\
-  \} \n\
-  \\n\
-  \function readUInt32(uint ptr, bytes data) constant returns (uint32) { \n\
-  \  return uint32(readUint(ptr, data, 4)); \n\
-  \} \n\
-  \\n\
-  \function readUInt64(uint ptr, bytes data) constant returns (uint64) { \n\
-  \  return uint64(readUint(ptr, data, 8)); \n\
-  \} \n\
-  \\n\
+  \enum WireType { Varint, Fixed64, LengthDelim, StartGroup, EndGroup, Fixed32 }                \n\
+  \                                                                                             \n\
+  \function readKey(uint ptr, bytes data) constant returns (uint, WireType, uint) {             \n\
+  \  var (x, n) = readVarInt(ptr, data);                                                        \n\
+  \  WireType typeId  = WireType(x & 7);                                                        \n\
+  \  uint fieldId = x >> 3;                                                                     \n\
+  \  return (fieldId, typeId, n);                                                               \n\
+  \}                                                                                            \n\
+  \                                                                                             \n\
+  \function readVarInt(uint ptr, bytes data) constant returns (uint, uint) {                    \n\
+  \  uint x = 0;                                                                                \n\
+  \  uint bytesUsed = 0;                                                                        \n\
+  \  assembly {                                                                                 \n\
+  \    let b := 0                                                                               \n\
+  \    ptr   := add(input, ptr)                                                                 \n\
+  \    loop :                                                                                   \n\
+  \      b         := byte(0, mload(ptr))                                                       \n\
+  \      x         := or(x, mul(and(0x7f, b), exp(2, mul(7, bytesUsed))))                       \n\
+  \      bytesUsed := add(bytesUsed, 1)                                                         \n\
+  \      ptr       := add(ptr, 0x01)                                                            \n\
+  \      jumpi(loop, eq(0x80, and(b, 0x80)))                                                    \n\
+  \  }                                                                                          \n\
+  \  return (x, bytesUsed);                                                                     \n\
+  \}                                                                                            \n\
+  \                                                                                             \n\
+  \function readUInt32(uint ptr, bytes data) constant returns (uint32) {                        \n\
+  \  return uint32(readUint(ptr, data, 4));                                                     \n\
+  \}                                                                                            \n\
+  \                                                                                             \n\
+  \function readUInt64(uint ptr, bytes data) constant returns (uint64) {                        \n\
+  \  return uint64(readUint(ptr, data, 8));                                                     \n\
+  \}                                                                                            \n\
+  \                                                                                             \n\
   \function readUint(uint ptr, bytes data, uint bytesLength) constant internal returns (uint) { \n\
-  \  uint x = 0; \n\
-  \  assembly { \n\
-  \    let i := 0 \n\
-  \    ptr   := add(data, ptr) \n\
-  \    loop : \n\
-  \      jumpi(end, eq(i, bytesLength)) \n\
-  \      x   := or(x, mul(byte(0, mload(ptr)), exp(2, mul(8, i)))) \n\
-  \      ptr := add(ptr, 0x01) \n\
-  \      i   := add(i, 1) \n\
-  \      jump(loop) \n\
-  \    end : \n\
-  \  } \n\
-  \  return x; \n\
-  \} \n\
+  \  uint x = 0;                                                                                \n\
+  \  assembly {                                                                                 \n\
+  \    let i := 0                                                                               \n\
+  \    ptr   := add(data, ptr)                                                                  \n\
+  \    loop :                                                                                   \n\
+  \      jumpi(end, eq(i, bytesLength))                                                         \n\
+  \      x   := or(x, mul(byte(0, mload(ptr)), exp(2, mul(8, i))))                              \n\
+  \      ptr := add(ptr, 0x01)                                                                  \n\
+  \      i   := add(i, 1)                                                                       \n\
+  \      jump(loop)                                                                             \n\
+  \    end :                                                                                    \n\
+  \  }                                                                                          \n\
+  \  return x;                                                                                  \n\
+  \}                                                                                            \n\
   \"
 
