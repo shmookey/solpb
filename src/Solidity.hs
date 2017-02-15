@@ -130,6 +130,24 @@ staticCode = "\
   \  return (fieldId, typeId, n);                                                               \n\
   \}                                                                                            \n\
   \                                                                                             \n\
+  \function readString(uint ptr, bytes data, uint length) constant returns (string) {           \n\
+  \  bytes memory b = new bytes(length);                                                        \n\
+  \  assembly {                                                                                 \n\
+  \    let bptr  := add(b, 32)                                                                  \n\
+  \    let count := 0                                                                           \n\
+  \    ptr       := add(data, ptr)                                                              \n\
+  \    loop :                                                                                   \n\
+  \      jumpi(end, eq(count, length))                                                          \n\
+  \      mstore8(bptr, byte(0, mload(ptr)))                                                     \n\
+  \      ptr   := add(ptr, 1)                                                                   \n\
+  \      bptr  := add(bptr, 1)                                                                  \n\
+  \      count := add(count, 1)                                                                 \n\
+  \      jump(loop)                                                                             \n\
+  \    end:                                                                                     \n\
+  \  }                                                                                          \n\
+  \  return string(b);                                                                          \n\
+  \}                                                                                            \n\
+  \                                                                                             \n\
   \function readVarInt(uint ptr, bytes data) constant returns (uint, uint) {                    \n\
   \  uint x = 0;                                                                                \n\
   \  uint bytesUsed = 0;                                                                        \n\
