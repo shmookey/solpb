@@ -115,16 +115,28 @@ formatDecoder t = printf "\
   \  // The size of `data` and its first element are offset by a 256-bit length \n\
   \  uint len = data.length + 32;                                               \n\
   \  uint ptr = 32;                                                             \n\
+  \  uint bytesRead;                                                            \n\
   \                                                                             \n\
   \  while (ptr < len) {                                                        \n\
-  \    var (fieldId, wireType, n) = readKey(ptr, data);                         \n\
+  \    uint fieldId;                                                            \n\
+  \    WireType wireType;                                                       \n\
+  \    (fieldId, wireType, bytesRead) = readKey(ptr, data);                     \n\
   \    SolType typ = fieldType(fieldId);                                        \n\
-  \    ptr += n;                                                                \n\
+  \    ptr += bytesRead;                                                        \n\
   \                                                                             \n\
   \    if(wireType == WireType.Varint) {                                        \n\
-  \      var (x1, sz) = readVarInt(ptr, data);                                  \n\
-  \      ptr += sz;                                                             \n\
-  \      setField_uint(x1, fieldId, buf);                                       \n\
+  \      uint x1;                                                               \n\
+  \      (x1, bytesRead) = readVarInt(ptr, data);                               \n\
+  \      ptr += bytesRead;                                                      \n\
+  \      if (typ == SolType.UInt) {                                             \n\
+  \        setField_uint(x1, fieldId, buf);                                     \n\
+  \      } else if (typ == SolType.UInt32) {                                    \n\
+  \        setField_uint32(uint32(x1), fieldId, buf);                           \n\
+  \      } else if (typ == SolType.UInt64) {                                    \n\
+  \        setField_uint64(uint64(x1), fieldId, buf);                           \n\
+  \      } else {                                                               \n\
+  \        throw;                                                               \n\
+  \      }                                                                      \n\
   \                                                                             \n\
   \    } else if(wireType == WireType.Fixed64) {                                \n\
   \      uint64 x2 = readUInt64(ptr, data);                                     \n\
@@ -132,14 +144,16 @@ formatDecoder t = printf "\
   \      setField_uint64(x2, fieldId, buf);                                     \n\
   \                                                                             \n\
   \    } else if(wireType == WireType.LengthDelim) {                            \n\
-  \      var (sz1,sz2) = readVarInt(ptr, data);                                 \n\
-  \      ptr += sz2;                                                            \n\
+  \      uint dataLen;                                                          \n\
+  \      (dataLen, bytesRead) = readVarInt(ptr, data);                          \n\
+  \      ptr += bytesRead;                                                      \n\
   \      if (typ == SolType.String) {                                           \n\
-  \        string memory xs = readString(ptr, data, sz1);                       \n\
+  \        string memory xs = readString(ptr, data, dataLen);                   \n\
   \        setField_string(xs, fieldId, buf);                                   \n\
   \      } else {                                                               \n\
   \        throw;                                                               \n\
   \      }                                                                      \n\
+  \      ptr += dataLen;                                                        \n\
   \                                                                             \n\
   \    } else if(wireType == WireType.StartGroup) {                             \n\
   \      throw; // Deprecated, not implemented                                  \n\
@@ -164,7 +178,7 @@ staticCode = "\
   \function readKey(uint ptr, bytes data) constant returns (uint, WireType, uint) {             \n\
   \  var (x, n) = readVarInt(ptr, data);                                                        \n\
   \  WireType typeId  = WireType(x & 7);                                                        \n\
-  \  uint fieldId = 0; //x >> 3;                                                                \n\
+  \  uint fieldId = x / 8; //x >> 3;                                                            \n\
   \  return (fieldId, typeId, n);                                                               \n\
   \}                                                                                            \n\
   \                                                                                             \n\
