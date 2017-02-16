@@ -132,11 +132,11 @@ formatDecoder t = printf "\
   \      setField_uint64(x2, fieldId, buf);                                     \n\
   \                                                                             \n\
   \    } else if(wireType == WireType.LengthDelim) {                            \n\
-  \      uint (sz1,sz2) = readVarInt(ptr, data);                                \n\
+  \      var (sz1,sz2) = readVarInt(ptr, data);                                 \n\
   \      ptr += sz2;                                                            \n\
   \      if (typ == SolType.String) {                                           \n\
-  \        string xs = readString(ptr, data, sz1);                              \n\
-  \        //setField_string(xs, fieldId, buf);                                 \n\
+  \        string memory xs = readString(ptr, data, sz1);                       \n\
+  \        setField_string(xs, fieldId, buf);                                   \n\
   \      } else {                                                               \n\
   \        throw;                                                               \n\
   \      }                                                                      \n\
