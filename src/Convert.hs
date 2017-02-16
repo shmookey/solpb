@@ -36,10 +36,9 @@ createStruct msg@(DescriptorProto {field=dFields}) =
   in case DescriptorProto.name msg of
     Just sName -> S.Struct (uToString sName) sFields
     _          -> error "Message type must have a name."
-  
 
 convertType :: FieldType.Type -> S.Type
 convertType x = case x of
   FieldType.TYPE_UINT32 -> S.UInt32
   FieldType.TYPE_UINT64 -> S.UInt64
-
+  FieldType.TYPE_STRING -> S.String

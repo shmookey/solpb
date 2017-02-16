@@ -7,6 +7,7 @@ import Data.Map (Map)
 
 data Type
   = UInt | UInt32 | UInt64
+  | String
   deriving (Eq, Ord)
 
 type FieldName  = String
@@ -24,6 +25,7 @@ instance Format Type where
     UInt   -> "uint"
     UInt32 -> "uint32"
     UInt64 -> "uint64"
+    String -> "string"
 
 instance Format Setter where
   fmt (Setter structName setterType fields) =
@@ -32,7 +34,9 @@ instance Format Setter where
       name    = "setField_" ++ typ
       args    = printf "(%s x, uint fieldId, %s obj)" typ structName :: String
       proto   = printf "function %s%s internal constant" name args :: String
-      ifs     = (intercalate " else " $ map iff fields) ++ term
+      ifs     = case fields of 
+                 [] -> "throw;"
+                 _  -> (intercalate " else " $ map iff fields) ++ term
       term    = " else {\n  throw;\n}"
 
       iff :: Field -> String
@@ -61,27 +65,52 @@ formatLibrary x@(Struct name fields) =
     statics = indent 2 staticCode
     setters = indent 2 . intercalate "\n" . map fmt $ createSetters name fields
     struct  = indent 2 $ fmt x
+    ftypes  = indent 2 $ formatGetFieldType x
   in
-    printf "library %s {\n%s\n%s\n%s\n%s\n}" name struct statics decoder setters
+    printf "library %s {\n%s\n%s\n%s\n%s\n%s\n}" name struct ftypes statics decoder setters
 
 createSetters :: StructName -> [Field] -> [Setter]
 createSetters name =
   let
-   accumulate :: Map Type [Field] -> Field -> Map Type [Field]
-   accumulate acc x@(Field i k t) = case Map.lookup t acc of
-     Just xs -> Map.insert t (x:xs) acc
-     Nothing -> Map.insert t [x] acc
+    empties = Map.fromList $ zip [UInt, UInt32, UInt64, String] (repeat [])
+
+    accumulate :: Map Type [Field] -> Field -> Map Type [Field]
+    accumulate acc x@(Field i k t) = case Map.lookup t acc of
+      Just xs -> Map.insert t (x:xs) acc
+      Nothing -> Map.insert t [x] acc
   in
-    map (uncurry $ Setter name) . Map.toList . foldl accumulate mempty
+    map (uncurry $ Setter name) . Map.toList . foldl accumulate empties
 
 indent :: Int -> String -> String
 indent n = unlines . map (spaces ++) . lines
   where spaces = take n $ repeat ' '
 
+formatGetFieldType :: Struct -> String
+formatGetFieldType (Struct name fields) =
+  let
+    proto   = "function fieldType(uint id) internal constant returns (SolType)"
+    ifs     = (intercalate " else " $ map iff fields) ++ term
+    term    = " else {\n  throw;\n}"
+
+    iff :: Field -> String
+    iff (Field i _ t) = printf "if (%s) {\n  %s\n}" cond action
+      where cond   = printf "id == %i" i :: String
+            action = printf "return SolType.%s;" (solEnum t) :: String
+
+  in
+    printf "%s {\n%s}" proto (indent 2 ifs)
+
+solEnum :: Type -> String
+solEnum x = case x of
+  UInt   -> "UInt"
+  UInt32 -> "UInt32"
+  UInt64 -> "UInt64"
+  String -> "String"
+
 formatDecoder :: StructName -> String
 formatDecoder t = printf "\
   \function decode%s(bytes data) internal constant returns (%s) {               \n\
-  \  %s buf;                                                                    \n\
+  \  %s memory buf;                                                             \n\
   \                                                                             \n\
   \  // The size of `data` and its first element are offset by a 256-bit length \n\
   \  uint len = data.length + 32;                                               \n\
@@ -89,20 +118,28 @@ formatDecoder t = printf "\
   \                                                                             \n\
   \  while (ptr < len) {                                                        \n\
   \    var (fieldId, wireType, n) = readKey(ptr, data);                         \n\
+  \    SolType typ = fieldType(fieldId);                                        \n\
   \    ptr += n;                                                                \n\
   \                                                                             \n\
   \    if(wireType == WireType.Varint) {                                        \n\
   \      var (x1, sz) = readVarInt(ptr, data);                                  \n\
   \      ptr += sz;                                                             \n\
-  \      setField_uint(fieldId, x1, buf);                                       \n\
+  \      setField_uint(x1, fieldId, buf);                                       \n\
   \                                                                             \n\
   \    } else if(wireType == WireType.Fixed64) {                                \n\
   \      uint64 x2 = readUInt64(ptr, data);                                     \n\
   \      ptr += 8;                                                              \n\
-  \      setField_uint64(fieldId, x2, buf);                                     \n\
+  \      setField_uint64(x2, fieldId, buf);                                     \n\
   \                                                                             \n\
   \    } else if(wireType == WireType.LengthDelim) {                            \n\
-  \      throw; // Not implemented                                              \n\
+  \      uint (sz1,sz2) = readVarInt(ptr, data);                                \n\
+  \      ptr += sz2;                                                            \n\
+  \      if (typ == SolType.String) {                                           \n\
+  \        string xs = readString(ptr, data, sz1);                              \n\
+  \        //setField_string(xs, fieldId, buf);                                 \n\
+  \      } else {                                                               \n\
+  \        throw;                                                               \n\
+  \      }                                                                      \n\
   \                                                                             \n\
   \    } else if(wireType == WireType.StartGroup) {                             \n\
   \      throw; // Deprecated, not implemented                                  \n\
@@ -113,7 +150,7 @@ formatDecoder t = printf "\
   \    } else if(wireType == WireType.Fixed32) {                                \n\
   \      uint32 x3 = readUInt32(ptr, data);                                     \n\
   \      ptr += 4;                                                              \n\
-  \      setField_uint32(fieldId, x3, buf);                                     \n\
+  \      setField_uint32(x3, fieldId, buf);                                     \n\
   \    }                                                                        \n\
   \  }                                                                          \n\
   \  return buf;                                                                \n\
@@ -122,11 +159,12 @@ formatDecoder t = printf "\
 staticCode :: String
 staticCode = "\
   \enum WireType { Varint, Fixed64, LengthDelim, StartGroup, EndGroup, Fixed32 }                \n\
+  \enum SolType { UInt, UInt32, UInt64, String }                                                \n\
   \                                                                                             \n\
   \function readKey(uint ptr, bytes data) constant returns (uint, WireType, uint) {             \n\
   \  var (x, n) = readVarInt(ptr, data);                                                        \n\
   \  WireType typeId  = WireType(x & 7);                                                        \n\
-  \  uint fieldId = x >> 3;                                                                     \n\
+  \  uint fieldId = 0; //x >> 3;                                                                \n\
   \  return (fieldId, typeId, n);                                                               \n\
   \}                                                                                            \n\
   \                                                                                             \n\
@@ -153,7 +191,7 @@ staticCode = "\
   \  uint bytesUsed = 0;                                                                        \n\
   \  assembly {                                                                                 \n\
   \    let b := 0                                                                               \n\
-  \    ptr   := add(input, ptr)                                                                 \n\
+  \    ptr   := add(data, ptr)                                                                  \n\
   \    loop :                                                                                   \n\
   \      b         := byte(0, mload(ptr))                                                       \n\
   \      x         := or(x, mul(and(0x7f, b), exp(2, mul(7, bytesUsed))))                       \n\
