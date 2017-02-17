@@ -1,5 +1,6 @@
 message Thing {
   required uint32 foo = 1;
-  required uint32 bar = 2;
+  repeated uint64 bar = 2;
   required string abc = 3;
+  repeated string xyz = 4;
 }

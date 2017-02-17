@@ -7,12 +7,13 @@ import Data.Foldable (toList)
 import Text.DescriptorProtos.FileDescriptorProto
   (FileDescriptorProto(FileDescriptorProto, message_type))
 import Text.DescriptorProtos.FieldDescriptorProto
-  (FieldDescriptorProto(FieldDescriptorProto, name, number, type'))
+  (FieldDescriptorProto(FieldDescriptorProto, label, name, number, type'))
 import Text.DescriptorProtos.DescriptorProto
   (DescriptorProto(DescriptorProto, field))
 import Text.ProtocolBuffers.Basic (uToString)
 import qualified Text.DescriptorProtos.DescriptorProto as DescriptorProto
 import qualified Text.DescriptorProtos.FieldDescriptorProto.Type as FieldType
+import qualified Text.DescriptorProtos.FieldDescriptorProto.Label as FieldLabel
 
 import qualified Solidity as S
 
@@ -28,10 +29,12 @@ createStruct msg@(DescriptorProto {field=dFields}) =
     sFields = toList $ fmap mkField dFields
 
     mkField :: FieldDescriptorProto -> S.Field
-    mkField (FieldDescriptorProto {number, name, type'}) = 
-      case (number, name, type') of
-        (Just i, Just x, Just t) -> S.Field (fromIntegral i) (uToString x) (convertType t)
-        _                        -> error "Invalid field."
+    mkField (FieldDescriptorProto {number, name, type', label}) = 
+      case (number, name, type', label) of
+        (Just i, Just x, Just t, Just l) ->
+          S.Field (fromIntegral i) (uToString x) (convertType t) (convertLabel l)
+        _ ->
+          error "Invalid field."
 
   in case DescriptorProto.name msg of
     Just sName -> S.Struct (uToString sName) sFields
@@ -42,3 +45,10 @@ convertType x = case x of
   FieldType.TYPE_UINT32 -> S.UInt32
   FieldType.TYPE_UINT64 -> S.UInt64
   FieldType.TYPE_STRING -> S.String
+
+convertLabel :: FieldLabel.Label -> S.Label
+convertLabel x = case x of
+  FieldLabel.LABEL_OPTIONAL -> S.Optional
+  FieldLabel.LABEL_REQUIRED -> S.Required
+  FieldLabel.LABEL_REPEATED -> S.Repeated
+
