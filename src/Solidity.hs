@@ -472,5 +472,13 @@ staticCode = "\
   \  }                                                                                          \n\
   \  return x;                                                                                  \n\
   \}                                                                                            \n\
+  \                                                                                             \n\
+  \function readSInt(bytes input, uint ptr) returns (int signedInt, uint) {                     \n\
+  \  var (varInt, bytesUsed) = readVarInt(input, ptr);                                          \n\
+  \  assembly {                                                                                 \n\
+  \    signedInt := xor(div(varInt, 2), add(not(and(varInt, 1)), 1))                            \n\
+  \  }                                                                                          \n\
+  \  return (signedInt, bytesUsed);                                                             \n\
+  \}                                                                                            \n\
   \"
 
