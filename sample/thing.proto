@@ -1,6 +1,11 @@
 message Thing {
-  required uint32 foo = 1;
-  repeated uint64 bar = 2;
-  required string abc = 3;
-  repeated string xyz = 4;
+  message SubThing {
+    required uint32 first  = 1;
+    required uint32 second = 2;
+  }
+  required uint32 foo    = 1;
+  repeated uint64 bar    = 2;
+  required string abc    = 3;
+  repeated string xyz    = 4;
+  repeated SubThing subs = 5;
 }
