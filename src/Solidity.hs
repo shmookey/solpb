@@ -5,7 +5,7 @@ import Text.Printf (printf)
 import Data.List (intercalate, nub, partition)
 import Data.Map (Map)
 
-data Type = UInt | UInt32 | UInt64 | String | Message StructName
+data Type = UInt | UInt32 | UInt64 | String | Bytes | Message StructName
   deriving (Eq, Ord)
 
 data Label = Optional | Required | Repeated
@@ -27,6 +27,7 @@ instance Format Type where
     UInt32    -> "uint32"
     UInt64    -> "uint64"
     String    -> "string"
+    Bytes     -> "bytes"
     Message m -> m ++ "Codec." ++ m
 
 instance Format Setter where
@@ -87,8 +88,8 @@ createSetters name fields =
   let
     (scalars,arrays) = partition isScalar fields
 
-    scalarTypes = nub $ [UInt, UInt32, UInt64, String] ++ map msgType scalars
-    arrayTypes  = nub $ [UInt, UInt32, UInt64, String] ++ map msgType arrays
+    scalarTypes = nub $ [UInt, UInt32, UInt64, Bytes, String] ++ map msgType scalars
+    arrayTypes  = nub $ [UInt, UInt32, UInt64, Bytes, String] ++ map msgType arrays
     scalarInit  = Map.fromList $ zip scalarTypes (repeat [])
     arrayInit   = Map.fromList $ zip arrayTypes (repeat [])
 
@@ -223,6 +224,7 @@ solEnum x = case x of
   UInt32    -> "UInt32"
   UInt64    -> "UInt64"
   String    -> "String"
+  Bytes     -> "Bytes"
   Message _ -> "Message"
 
 formatDecoder :: Struct -> [(Field, Int)] -> String
@@ -237,6 +239,10 @@ formatDecoder x@(Struct name fields) counterIds =
 
     allocs = indent 2 . intercalate "\n" $ map alloc counterIds
   in printf "\
+  \function decode(bytes data) internal constant returns (%s) {                                 \n\
+  \  return decode%s(32, data, data.length);                                                    \n\
+  \}                                                                                            \n\
+  \                                                                                             \n\
   \function decode%s(uint offset, bytes data, uint len) internal constant returns (%s) {        \n\
   \  %s memory buf;                                                                             \n\
   \  // The size of `data` and its first element are offset by a 256-bit length                 \n\
@@ -341,6 +347,9 @@ formatDecoder x@(Struct name fields) counterIds =
   \    if (solType == SolType.String) {                                                         \n\
   \      string memory resultString = readString(ptr, data, dataLen);                           \n\
   \      setField_string(resultString, fieldId, buf);                                           \n\
+  \    } else if (solType == SolType.Bytes) {                                                   \n\
+  \      bytes memory resultBytes = readBytes(ptr, data, dataLen);                              \n\
+  \      setField_bytes(resultBytes, fieldId, buf);                                             \n\
   \    } %s else {                                                                              \n\
   \      throw;                                                                                 \n\
   \    }                                                                                        \n\
@@ -386,6 +395,9 @@ formatDecoder x@(Struct name fields) counterIds =
   \    if (solType == SolType.String) {                                                         \n\
   \      string memory resultString = readString(ptr, data, dataLen);                           \n\
   \      setArrayField_string(slot, resultString, fieldId, buf);                                \n\
+  \    } else if (solType == SolType.Bytes) {                                                   \n\
+  \      bytes memory resultBytes = readBytes(ptr, data, dataLen);                              \n\
+  \      setArrayField_bytes(slot, resultBytes, fieldId, buf);                                  \n\
   \    } %s else {                                                                              \n\
   \      throw;                                                                                 \n\
   \    }                                                                                        \n\
@@ -401,12 +413,12 @@ formatDecoder x@(Struct name fields) counterIds =
   \    throw;                                                                                   \n\
   \  }                                                                                          \n\
   \  return bytesRead;                                                                          \n\
-  \}" name name name numArrays allocs name msgDecodeScalar name msgDecodeArray
+  \}" name name name name name numArrays allocs name msgDecodeScalar name msgDecodeArray
 
 staticCode :: String
 staticCode = "\
   \enum WireType { Varint, Fixed64, LengthDelim, StartGroup, EndGroup, Fixed32 }                \n\
-  \enum SolType { UInt, UInt32, UInt64, String, Message }                                       \n\
+  \enum SolType { UInt, UInt32, UInt64, String, Bytes, Message }                                \n\
   \                                                                                             \n\
   \function readKey(uint ptr, bytes data) constant returns (uint, WireType, uint) {             \n\
   \  var (x, n) = readVarInt(ptr, data);                                                        \n\
@@ -415,7 +427,7 @@ staticCode = "\
   \  return (fieldId, typeId, n);                                                               \n\
   \}                                                                                            \n\
   \                                                                                             \n\
-  \function readString(uint ptr, bytes data, uint length) constant returns (string) {           \n\
+  \function readBytes(uint ptr, bytes data, uint length) constant returns (bytes) {             \n\
   \  bytes memory b = new bytes(length);                                                        \n\
   \  assembly {                                                                                 \n\
   \    let bptr  := add(b, 32)                                                                  \n\
@@ -430,7 +442,11 @@ staticCode = "\
   \      jump(loop)                                                                             \n\
   \    end:                                                                                     \n\
   \  }                                                                                          \n\
-  \  return string(b);                                                                          \n\
+  \  return b;                                                                                  \n\
+  \}                                                                                            \n\
+  \                                                                                             \n\
+  \function readString(uint ptr, bytes data, uint length) constant returns (string) {           \n\
+  \  return string(readBytes(ptr, data, length));                                               \n\
   \}                                                                                            \n\
   \                                                                                             \n\
   \function readVarInt(uint ptr, bytes data) constant returns (uint, uint) {                    \n\
@@ -474,7 +490,7 @@ staticCode = "\
   \}                                                                                            \n\
   \                                                                                             \n\
   \function readSInt(bytes input, uint ptr) returns (int signedInt, uint) {                     \n\
-  \  var (varInt, bytesUsed) = readVarInt(input, ptr);                                          \n\
+  \  var (varInt, bytesUsed) = readVarInt(ptr, input);                                          \n\
   \  assembly {                                                                                 \n\
   \    signedInt := xor(div(varInt, 2), add(not(and(varInt, 1)), 1))                            \n\
   \  }                                                                                          \n\

@@ -54,6 +54,7 @@ convertType (FieldDescriptorProto {type', type_name}) =
     (Just FieldType.TYPE_UINT32, _) -> S.UInt32
     (Just FieldType.TYPE_UINT64, _) -> S.UInt64
     (Just FieldType.TYPE_STRING, _) -> S.String
+    (Just FieldType.TYPE_BYTES, _)  -> S.Bytes
     (Nothing, Just x)               -> S.Message $ uToString x
 
 convertLabel :: FieldLabel.Label -> S.Label

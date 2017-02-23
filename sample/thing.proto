@@ -2,6 +2,7 @@ message Thing {
   message SubThing {
     required uint32 first  = 1;
     required uint32 second = 2;
+    required bytes addr    = 3;
   }
   required uint32 foo    = 1;
   repeated uint64 bar    = 2;
@@ -9,3 +10,4 @@ message Thing {
   repeated string xyz    = 4;
   repeated SubThing subs = 5;
 }
+
