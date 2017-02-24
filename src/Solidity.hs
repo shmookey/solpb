@@ -77,11 +77,12 @@ formatLibrary x@(Struct name fields) =
     struct   = indent 2 $ fmt x
     ftypes   = indent 2 $ formatGetFieldType x
     counters = indent 2 $ formatGetRepeatCounter x counterIds
+    storefn  = indent 2 $ generateStoreFunction x
 
     (scalars,arrays) = partition isScalar fields
     counterIds       = (zip arrays [0..]) ++ (zip scalars $ repeat (-1))
   in
-    printf "library %sCodec {\n%s\n%s\n%s\n%s\n%s\n%s\n}" name struct decoder counters ftypes statics setters
+    printf "library %sCodec {\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n}" name struct storefn decoder counters ftypes statics setters
 
 createSetters :: StructName -> [Field] -> String
 createSetters name fields =
@@ -109,6 +110,47 @@ createSetters name fields =
   in
     intercalate "\n" $ scalarSetters ++ arraySetters
 
+isPrim :: Field -> Bool
+isPrim (Field _ _ (Message _) _) = False
+isPrim _                         = True
+
+generateStoreFunction :: Struct -> String
+generateStoreFunction (Struct name fields) =
+  let
+    (primFields, structFields)    = partition isPrim fields
+    (scalarStructs, arrayStructs) = partition isScalar structFields
+
+    primSetters = 
+      indent 2 
+      . unlines 
+      $ map (\(Field _ x _ _) -> "output." ++ x ++ " = input." ++ x ++ ";") primFields
+
+    scalarSetters = indent 2 . unlines $ map formatScalarSetter scalarStructs
+
+    arraySetters = indent 2 . unlines $ map formatArraySetter arrayStructs
+
+    arrayIndex = case arrayStructs of [] -> ""
+                                      _  -> "  uint i;"
+
+    formatScalarSetter :: Field -> String
+    formatScalarSetter (Field _ k (Message t) _) =
+      t ++ "Codec.store(input." ++ k ++ ", output." ++ k ++ ");"
+
+    formatArraySetter :: Field -> String
+    formatArraySetter (Field _ k (Message t) _) = printf "\
+      \output.%s.length = input.%s.length;                         \n\
+      \for (i=0; i<input.%s.length; i++) {                         \n\
+      \  %sCodec.store(input.%s[i], output.%s[i]);                 \n\
+      \}" k k k t k k
+  in
+    printf "\
+    \function store(%s memory input, %s storage output) internal { \n\
+    \%s                                                            \n\
+    \%s                                                            \n\
+    \%s                                                            \n\
+    \%s                                                            \n\
+    \}" name name primSetters scalarSetters arrayIndex arraySetters
+
 isScalar :: Field -> Bool    
 isScalar (Field _ _ _ x) = not (x == Repeated)
 
@@ -126,7 +168,7 @@ formatMessageDecoderScalar (Struct name fields) =
       where cond   = (printf "fieldId == %i" i) :: String
             typ    = fmt t
             safeTyp = map clean typ
-            action = (printf "setField_%s(%s.decode%s(ptr,data,dataLen), fieldId, buf);" typ typ typ) :: String
+            action = (printf "setField_%s(%s.decode%s(ptr,data,dataLen), fieldId, buf);" safeTyp (libName t) (msgTypeName t)) :: String
   
   in case msgs of
     [] -> ""
@@ -345,11 +387,9 @@ formatDecoder x@(Struct name fields) counterIds =
   \    (dataLen, bytesRead) = readVarInt(ptr, data);                                            \n\
   \    ptr += bytesRead;                                                                        \n\
   \    if (solType == SolType.String) {                                                         \n\
-  \      string memory resultString = readString(ptr, data, dataLen);                           \n\
-  \      setField_string(resultString, fieldId, buf);                                           \n\
+  \      setField_string(readString(ptr, data, dataLen), fieldId, buf);                         \n\
   \    } else if (solType == SolType.Bytes) {                                                   \n\
-  \      bytes memory resultBytes = readBytes(ptr, data, dataLen);                              \n\
-  \      setField_bytes(resultBytes, fieldId, buf);                                             \n\
+  \      setField_bytes(readBytes(ptr, data, dataLen), fieldId, buf);                           \n\
   \    } %s else {                                                                              \n\
   \      throw;                                                                                 \n\
   \    }                                                                                        \n\
@@ -393,11 +433,9 @@ formatDecoder x@(Struct name fields) counterIds =
   \    ptr += bytesRead;                                                                        \n\
   \    bytesRead += dataLen;                                                                    \n\
   \    if (solType == SolType.String) {                                                         \n\
-  \      string memory resultString = readString(ptr, data, dataLen);                           \n\
-  \      setArrayField_string(slot, resultString, fieldId, buf);                                \n\
+  \      setArrayField_string(slot, readString(ptr, data, dataLen), fieldId, buf);              \n\
   \    } else if (solType == SolType.Bytes) {                                                   \n\
-  \      bytes memory resultBytes = readBytes(ptr, data, dataLen);                              \n\
-  \      setArrayField_bytes(slot, resultBytes, fieldId, buf);                                  \n\
+  \      setArrayField_bytes(slot, readBytes(ptr, data, dataLen), fieldId, buf);                \n\
   \    } %s else {                                                                              \n\
   \      throw;                                                                                 \n\
   \    }                                                                                        \n\

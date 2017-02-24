@@ -9,5 +9,6 @@ message Thing {
   required string abc    = 3;
   repeated string xyz    = 4;
   repeated SubThing subs = 5;
+  required SubThing obj  = 6;
 }
 
