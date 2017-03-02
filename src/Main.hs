@@ -10,6 +10,7 @@ import Data.List (intercalate)
 
 data Options = Options
   { optInput :: String
+  , optDir   :: String
   } deriving (Show)
 
 
@@ -24,6 +25,10 @@ readCliOpts =
       <$> Opts.argument Opts.str
           ( Opts.metavar "FILE"
          <> Opts.help    "Path to input file." )
+      <*> Opts.strOption Opts.str
+          ( O.long "dir"
+         <> O.short 'd'
+         <> Opts.help    "Output directory." )
 
 processDescriptor :: Proto.FileDescriptorProto -> String
 processDescriptor =
