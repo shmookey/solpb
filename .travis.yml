@@ -27,6 +27,7 @@ script:
 deploy:
   provider: s3
   access_key_id: AKIAIRBCAOVO5336FAWQ
+  region: ap-southeast-2
   bucket: protobuf-solidity
   skip_cleanup: true
   local_dir: build
