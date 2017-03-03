@@ -20,6 +20,7 @@ executable solpb
   build-depends:       base >= 4.7 && < 5
                      , bytestring
                      , containers
+                     , directory
                      , hprotoc
                      , optparse-applicative
                      , protocol-buffers

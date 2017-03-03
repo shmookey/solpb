@@ -19,12 +19,15 @@ import qualified Solidity as S
 
 
 
-convert :: FileDescriptorProto -> [String]
+convert :: FileDescriptorProto -> [(String, String)]
 convert (FileDescriptorProto {message_type}) =
   let
     protos = concat $ fmap allDescriptorProtos message_type
+    compile x = 
+      let st@(S.Struct sname _)  = createStruct x
+      in (sname, S.formatLibrary st)
   in
-    toList $ fmap (S.formatLibrary . createStruct) protos
+    toList $ fmap compile protos
 
 allDescriptorProtos :: DescriptorProto -> [DescriptorProto]
 allDescriptorProtos x@(DescriptorProto {field, nested_type}) =

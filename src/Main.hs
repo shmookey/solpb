@@ -5,12 +5,13 @@ import qualified Data.ByteString.Lazy as B
 import Options.Applicative ((<>))
 import qualified Text.ProtocolBuffers.ProtoCompile.Parser as Parser
 import qualified Text.DescriptorProtos.FileDescriptorProto as Proto
+import System.Directory (createDirectory)
 import Convert
 import Data.List (intercalate)
 
 data Options = Options
   { optInput :: String
-  , optDir   :: String
+  , optDir   :: FilePath
   } deriving (Show)
 
 
@@ -26,21 +27,31 @@ readCliOpts =
           ( Opts.metavar "FILE"
          <> Opts.help    "Path to input file." )
       <*> Opts.strOption
-          ( Opts.long    "dir"
-         <> Opts.short   'd'
+          ( Opts.long    "out"
+         <> Opts.short   'o'
+         <> Opts.value   "."
          <> Opts.help    "Output directory." )
 
-processDescriptor :: Proto.FileDescriptorProto -> String
-processDescriptor =
-  intercalate "\n" . Convert.convert
+processDescriptor :: FilePath -> Proto.FileDescriptorProto -> IO ()
+processDescriptor outDir file =
+  let
+    writeSrc (k, v) = writeFile (outDir ++ "/" ++ k ++ ".sol") v
+  in
+    mapM_ writeSrc $ Convert.convert file
 
 main :: IO ()
 main = readCliOpts >>= \o ->
   let
-    input = optInput o
+    input  = optInput o
+    outDir = optDir o
   in do
     result <- Parser.parseProto input <$> B.readFile input
-    putStrLn $ case result of
-      Left e  -> show e
-      Right x -> processDescriptor x
+
+    if not (outDir == ".")
+    then createDirectory outDir
+    else return ()
+
+    case result of
+      Left e  -> putStrLn $ show e
+      Right x -> processDescriptor outDir x
 
