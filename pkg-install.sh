@@ -29,5 +29,7 @@ fi
 
 cp uninstall.sh $DEST/uninstall.sh
 
+echo "Uninstaller saved at $DEST/uninstall.sh"
+
 echo "Done."
 
