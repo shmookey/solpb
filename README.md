@@ -1,5 +1,7 @@
 # Protocol buffers for Solidity
 
+[![Build Status](https://travis-ci.com/CBAInnovationLab/protobuf-solidity.svg?token=s2ifT26XSGNFYpJF3fSf&branch=master)](https://travis-ci.com/CBAInnovationLab/protobuf-solidity)
+
 This project aims to provide an implementation of Google's protocol buffers for
 smart contracts written in Solidity, targeting Ethereum-based blockchains.
 
