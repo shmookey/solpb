@@ -20,10 +20,7 @@ before_install:
 install:
 - stack --no-terminal --install-ghc test --only-dependencies
 script:
-- stack --copy-bins --no-terminal build
-- export VERSION=$(cat VERSION)
-- mkdir -p build/$TRAVIS_BRANCH/$VERSION/$TRAVIS_OS_NAME
-- cp ~/.local/bin/solpb build/$TRAVIS_BRANCH/$VERSION/$TRAVIS_OS_NAME/solpb
+- make pkg
 deploy:
   provider: s3
   access_key_id: AKIAIRBCAOVO5336FAWQ
