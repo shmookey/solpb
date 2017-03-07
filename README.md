@@ -38,6 +38,13 @@ Mac users can install the latest stable version of the solpb via homebrew:
 brew install CBAInnovationLab/tap/solpb
 ```
 
+Debian-based linux distributions such as Ubuntu can use the deb package:
+
+```bash
+wget https://s3-ap-southeast-2.amazonaws.com/protobuf-solidity/packages/debian/solpb-0.1.0-linux-x86_64.deb
+dpkg -i solpb-0.1.0-linux-x86_64.deb
+```
+
 Other users may install from the latest binary tarball:
 
 ```bash
