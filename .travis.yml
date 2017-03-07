@@ -20,7 +20,9 @@ before_install:
 install:
 - stack --no-terminal --install-ghc test --only-dependencies
 script:
-- make pkg
+- stack --copy-bins --no-terminal build
+- git clone git@github.com:CBAInnovationLab/packages.git
+- ./packages/solpb/build.sh
 deploy:
   provider: s3
   access_key_id: AKIAIRBCAOVO5336FAWQ
