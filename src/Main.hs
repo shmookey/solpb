@@ -13,7 +13,7 @@ data Options = Options
   { optDir    :: FilePath
   , optSuffix :: String
   , optPragma :: Bool
-  , optInput  :: String
+  , optInputs :: [FilePath]
   } deriving (Show)
 
 
@@ -39,9 +39,9 @@ readCliOpts =
           ( Opts.long    "pragma"
          <> Opts.short   'p'
          <> Opts.help    "Emit solidity version pragmas in generated code" )
-      <*> Opts.argument Opts.str
-          ( Opts.metavar "FILE"
-         <> Opts.help    "Path to input file" )
+      <*> Opts.some (Opts.argument Opts.str
+          ( Opts.metavar "FILE [FILES...]"
+         <> Opts.help    "Path to input file(s)" ))
 
 processDescriptor :: Bool -> FilePath -> String -> Proto.FileDescriptorProto -> IO ()
 processDescriptor pragma outDir suffix file =
@@ -51,21 +51,26 @@ processDescriptor pragma outDir suffix file =
   in
     mapM_ writeSrc $ Convert.convert file
 
+
+
 main :: IO ()
 main = readCliOpts >>= \o ->
   let
-    input  = optInput o
+    inputs = optInputs o
     outDir = optDir o
     suffix = optSuffix o
     pragma = optPragma o
+
+    procResult r = case r of
+      Left e  -> putStrLn $ show e
+      Right x -> processDescriptor pragma outDir suffix x
+      
   in do
-    result <- Parser.parseProto input <$> B.readFile input
+    results <- mapM (\x -> Parser.parseProto x <$> B.readFile x) inputs
 
     if not (outDir == ".")
     then createDirectory outDir
     else return ()
 
-    case result of
-      Left e  -> putStrLn $ show e
-      Right x -> processDescriptor pragma outDir suffix x
+    mapM_ procResult results
 
