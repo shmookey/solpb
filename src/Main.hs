@@ -5,7 +5,7 @@ import qualified Data.ByteString.Lazy as B
 import Options.Applicative ((<>))
 import qualified Text.ProtocolBuffers.ProtoCompile.Parser as Parser
 import qualified Text.DescriptorProtos.FileDescriptorProto as Proto
-import System.Directory (createDirectory)
+import System.Directory (createDirectory, doesDirectoryExist)
 import Convert
 import Data.List (intercalate)
 
@@ -51,8 +51,6 @@ processDescriptor pragma outDir suffix file =
   in
     mapM_ writeSrc $ Convert.convert file
 
-
-
 main :: IO ()
 main = readCliOpts >>= \o ->
   let
@@ -68,7 +66,8 @@ main = readCliOpts >>= \o ->
   in do
     results <- mapM (\x -> Parser.parseProto x <$> B.readFile x) inputs
 
-    if not (outDir == ".")
+    dirExists <- doesDirectoryExist outDir
+    if not dirExists
     then createDirectory outDir
     else return ()
 
