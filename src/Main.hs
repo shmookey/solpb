@@ -10,8 +10,9 @@ import Convert
 import Data.List (intercalate)
 
 data Options = Options
-  { optInput :: String
-  , optDir   :: FilePath
+  { optDir    :: FilePath
+  , optSuffix :: String
+  , optInput  :: String
   } deriving (Show)
 
 
@@ -23,19 +24,24 @@ readCliOpts =
    <> Opts.progDesc "Generate solidity libraries for working with protocol buffers." )
   where 
     cliOpts = Options
-      <$> Opts.argument Opts.str
-          ( Opts.metavar "FILE"
-         <> Opts.help    "Path to input file." )
-      <*> Opts.strOption
+      <$> Opts.strOption
           ( Opts.long    "out"
          <> Opts.short   'o'
          <> Opts.value   "."
          <> Opts.help    "Output directory." )
+      <*> Opts.strOption
+          ( Opts.long    "suffix"
+         <> Opts.short   's'
+         <> Opts.value   "_pb"
+         <> Opts.help    "Output file name suffix" )
+      <*> Opts.argument Opts.str
+          ( Opts.metavar "FILE"
+         <> Opts.help    "Path to input file." )
 
-processDescriptor :: FilePath -> Proto.FileDescriptorProto -> IO ()
-processDescriptor outDir file =
+processDescriptor :: FilePath -> String -> Proto.FileDescriptorProto -> IO ()
+processDescriptor outDir suffix file =
   let
-    writeSrc (k, v) = writeFile (outDir ++ "/" ++ k ++ ".sol") v
+    writeSrc (k, v) = writeFile (outDir ++ "/" ++ k ++ suffix ++ ".sol") v
   in
     mapM_ writeSrc $ Convert.convert file
 
@@ -44,6 +50,7 @@ main = readCliOpts >>= \o ->
   let
     input  = optInput o
     outDir = optDir o
+    suffix = optSuffix o
   in do
     result <- Parser.parseProto input <$> B.readFile input
 
@@ -53,5 +60,5 @@ main = readCliOpts >>= \o ->
 
     case result of
       Left e  -> putStrLn $ show e
-      Right x -> processDescriptor outDir x
+      Right x -> processDescriptor outDir suffix x
 
