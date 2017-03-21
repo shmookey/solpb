@@ -1,8 +1,13 @@
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Convert where
 
 import Data.Foldable (toList)
+import Data.Map (Map)
+import qualified Data.Map as Map
+import Data.Maybe (catMaybes)
+import Data.Text (pack)
 
 import Text.DescriptorProtos.FileDescriptorProto
   (FileDescriptorProto(FileDescriptorProto, message_type))
@@ -11,58 +16,63 @@ import Text.DescriptorProtos.FieldDescriptorProto
 import Text.DescriptorProtos.DescriptorProto
   (DescriptorProto(DescriptorProto, field, nested_type))
 import Text.ProtocolBuffers.Basic (uToString)
+import qualified Text.DescriptorProtos.FieldDescriptorProto as FieldDescriptorProto
 import qualified Text.DescriptorProtos.DescriptorProto as DescriptorProto
 import qualified Text.DescriptorProtos.FieldDescriptorProto.Type as FieldType
 import qualified Text.DescriptorProtos.FieldDescriptorProto.Label as FieldLabel
 
-import qualified Solidity as S
+import Control.Monad.Result
 
+import Gen
+import Types
+import qualified Library
 
-
-convert :: FileDescriptorProto -> [(String, String)]
+convert :: FileDescriptorProto -> [(Name, Code)]
 convert (FileDescriptorProto {message_type}) =
   let
-    protos = concat $ fmap allDescriptorProtos message_type
-    compile x = 
-      let st@(S.Struct sname _)  = createStruct x
-      in (sname, S.formatLibrary st)
+    protos = map (\(x,kvs) -> (x, (force $ Library.run x kvs)))
+             . map extractStruct
+             . concat 
+             $ fmap allDescriptorProtos message_type
+    force (Ok code) = code
   in
-    toList $ fmap compile protos
+    protos
 
 allDescriptorProtos :: DescriptorProto -> [DescriptorProto]
 allDescriptorProtos x@(DescriptorProto {field, nested_type}) =
-  case toList nested_type of [] -> [x]
-                             xs -> x:(concat $ map allDescriptorProtos xs)
+  case toList nested_type of 
+    [] -> [x]
+    xs -> x:(concat $ map allDescriptorProtos xs)
 
-createStruct :: DescriptorProto -> S.Struct
-createStruct msg@(DescriptorProto {field=dFields}) =
+extractStruct :: DescriptorProto -> (Name, Map Int (Name, FieldType))
+extractStruct srcStruct@(DescriptorProto {field=srcFields}) =
   let
-    sFields = toList $ fmap mkField dFields
+    fields = Map.fromList . catMaybes . toList $ fmap fieldProps srcFields
 
-    mkField :: FieldDescriptorProto -> S.Field
-    mkField fld@(FieldDescriptorProto {number, name, type', label}) = 
-      case (number, name, label) of
-        (Just i, Just x, Just l) ->
-          S.Field (fromIntegral i) (uToString x) (convertType fld) (convertLabel l)
-        _ ->
-          error "Invalid field."
+    fieldProps :: FieldDescriptorProto -> Maybe (Int, (Name, FieldType))
+    fieldProps src = do
+      num   <- fromIntegral       <$> FieldDescriptorProto.number src
+      name  <- (pack . uToString) <$> FieldDescriptorProto.name src
+      label <- convertLabel       <$> FieldDescriptorProto.label src
+      ft    <- return $ getFieldType src label
+      return (num, (name, ft))
+ 
+    convertLabel :: FieldLabel.Label -> Label
+    convertLabel x = case x of
+      FieldLabel.LABEL_OPTIONAL -> Optional
+      FieldLabel.LABEL_REQUIRED -> Required
+      FieldLabel.LABEL_REPEATED -> Repeated
 
-  in case DescriptorProto.name msg of
-    Just sName -> S.Struct (uToString sName) sFields
+    getFieldType :: FieldDescriptorProto -> Label -> FieldType
+    getFieldType (FieldDescriptorProto {type', type_name}) =
+      case (type', type_name) of
+        (Just FieldType.TYPE_UINT32, _) -> Prim "uint32"
+        (Just FieldType.TYPE_UINT64, _) -> Prim "uint64"
+        (Just FieldType.TYPE_STRING, _) -> Ref "string"
+        (Just FieldType.TYPE_BYTES, _)  -> Ref "bytes"
+        (Nothing, Just x)               -> User . pack $ uToString x
+
+  in case DescriptorProto.name srcStruct of
+    Just name  -> (pack $ uToString name, fields)
     _          -> error "Message type must have a name."
-
-convertType :: FieldDescriptorProto -> S.Type
-convertType (FieldDescriptorProto {type', type_name}) =
-  case (type', type_name) of
-    (Just FieldType.TYPE_UINT32, _) -> S.UInt32
-    (Just FieldType.TYPE_UINT64, _) -> S.UInt64
-    (Just FieldType.TYPE_STRING, _) -> S.String
-    (Just FieldType.TYPE_BYTES, _)  -> S.Bytes
-    (Nothing, Just x)               -> S.Message $ uToString x
-
-convertLabel :: FieldLabel.Label -> S.Label
-convertLabel x = case x of
-  FieldLabel.LABEL_OPTIONAL -> S.Optional
-  FieldLabel.LABEL_REQUIRED -> S.Required
-  FieldLabel.LABEL_REPEATED -> S.Repeated
 

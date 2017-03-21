@@ -58,6 +58,7 @@ Alternatively, you may always build from source (requires Stack):
 ```bash
 git clone https://github.com/CBAInnovationLab/protobuf-solidity.git
 cd protobuf-solidity
-make
+stack setup
+stack build
 ```
 

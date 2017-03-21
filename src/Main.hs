@@ -1,5 +1,6 @@
 module Main where
 
+import Data.Text (Text, pack, unpack)
 import qualified Options.Applicative as Opts
 import qualified Data.ByteString.Lazy as B
 import Options.Applicative ((<>))
@@ -49,7 +50,7 @@ processDescriptor pragma outDir suffix file =
     header          = if pragma then "pragma solidity ^0.4.1;\n\n" else ""
     writeSrc (k, v) = writeFile (outDir ++ "/" ++ k ++ suffix ++ ".sol") (header ++ v)
   in
-    mapM_ writeSrc $ Convert.convert file
+    mapM_ writeSrc . map (\(k,v) -> (unpack k, unpack v)) $ Convert.convert file
 
 main :: IO ()
 main = readCliOpts >>= \o ->
