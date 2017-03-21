@@ -11,6 +11,7 @@ import Control.Monad.Resultant
 import Control.Monad.Result
 
 import qualified Decode
+import qualified Encode
 import Gen
 import Types
 import Util
@@ -51,6 +52,7 @@ createLibrary =
       ++  "                                                                        \n"
       ++  "  $structDefinition                                                     \n"
       ++  "  $decoderSection                                                       \n"
+      ++  "  $encoderSection                                                       \n"
       ++  "  $storeFunction                                                        \n"
       ++  "  $utilityFunctions                                                     \n"
       ++  "}                                                                       \n"
@@ -58,12 +60,14 @@ createLibrary =
     name    <- getName
     fields  <- getFields
     decoder <- stripStart <$> Decode.generate
+    encoder <- stripStart <$> Encode.generate
     
     return $ format tmpl
       [ ("solidityVersion",  "^0.4.0")
       , ("libraryName",      libraryName name)
       , ("structDefinition", stripStart $ structDefinition name fields)
       , ("decoderSection",   decoder)
+      , ("encoderSection",   encoder)
       , ("utilityFunctions", stripStart $ utilityFunctions name)
       , ("storeFunction",    stripStart $ storeFunction name fields)
       ]
