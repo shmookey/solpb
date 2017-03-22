@@ -4,8 +4,10 @@ module Convert where
 
 import Prelude hiding (fail)
 import Data.Foldable (toList)
+import Data.List (intercalate)
+import Data.List.Split (splitOn)
 import Data.Map (Map)
-import Data.Text (pack)
+import Data.Text (pack, unpack)
 import qualified Data.Map as Map
 
 import Text.DescriptorProtos.FileDescriptorProto
@@ -26,7 +28,7 @@ import Control.Monad.Resultant
 import Types
 
 
-collect :: FileDescriptorProto -> Result String [State]
+collect :: FileDescriptorProto -> App [Struct]
 collect (FileDescriptorProto {message_type}) =
   let
     findAll :: DescriptorProto -> [DescriptorProto]
@@ -37,10 +39,10 @@ collect (FileDescriptorProto {message_type}) =
   in
     mapM create . concatMap findAll $ toList message_type
 
-create :: DescriptorProto -> Result String State
+create :: DescriptorProto -> App Struct
 create src@(DescriptorProto {field}) =
   let
-    fieldProps :: FieldDescriptorProto -> Result String (Int, (Name, FieldType))
+    fieldProps :: FieldDescriptorProto -> App (Int, (Name, FieldType))
     fieldProps src = do
       num  <- fromIntegral <$> fromMaybe "missing field number" (FDP.number src)
       name <- toName       <$> fromMaybe "missing field name"   (FDP.name src)
@@ -48,7 +50,7 @@ create src@(DescriptorProto {field}) =
       ft   <- getFieldType src lbl
       return (num, (name, ft))
  
-    getFieldType :: FieldDescriptorProto -> Label -> Result String FieldType
+    getFieldType :: FieldDescriptorProto -> Label -> App FieldType
     getFieldType (FieldDescriptorProto {type', type_name}) label =
       case (type', type_name) of
         (Just FT.TYPE_UINT32, _) -> return $ Prim (pack "uint32") label
@@ -56,8 +58,15 @@ create src@(DescriptorProto {field}) =
         (Just FT.TYPE_STRING, _) -> return $ Ref (pack "string") label
         (Just FT.TYPE_BYTES, _)  -> return $ Ref (pack "bytes") label
         (Just x, _)              -> fail $ "unsupported field type: " ++ (show x)
-        (Nothing, Just x)        -> return $ User (toName x) label
+        (Nothing, Just x)        -> readCustomType (toName x) label
         _                        -> fail "missing field type"
+
+    readCustomType :: Name -> Label -> App FieldType
+    readCustomType typName lbl = case (splitOn "." $ unpack typName) of
+      []              -> fail "missing field type name"
+      (x:[])          -> return $ User (pack x) lbl
+      ("solidity":xs) -> return $ Sol (pack $ intercalate "." xs) lbl
+      _               -> fail "user-defined nested types not yet supported"
 
     convertLabel :: FL.Label -> Label
     convertLabel x = case x of
@@ -71,7 +80,5 @@ create src@(DescriptorProto {field}) =
   in do 
     name   <- toName <$> fromMaybe "missing message type name" (DP.name src)
     fields <- Map.fromList <$> mapM fieldProps (toList field)
-    return $ State name fields
-
-
+    return $ Struct name fields
 

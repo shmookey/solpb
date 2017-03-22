@@ -13,8 +13,8 @@ import Util
 import qualified Library
 
 
-generate :: [State] -> Result String Code
-generate types =
+generate :: [Struct] -> App Code
+generate structs =
   let
     tmpl = pack
        $  "pragma solidity $solidityVersion;                                       \n"
@@ -44,7 +44,7 @@ generate types =
       ++  "$codecLibraries                                                         \n"
       ++  "                                                                        \n"
   in do
-    codecLibraries <- T.concat <$> mapM Library.generate types
+    codecLibraries <- T.concat <$> mapM Library.generate structs
     
     return $ format tmpl
       [ ("solidityVersion",  "^0.4.0")

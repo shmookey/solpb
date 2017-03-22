@@ -27,5 +27,6 @@ executable solpb
                      , optparse-applicative
                      , protocol-buffers
                      , protocol-buffers-descriptor
+                     , split
                      , template
                      , text

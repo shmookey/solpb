@@ -15,15 +15,6 @@ import Convert
 import Generator
 import Types
 
-type App = ResultantT IO () String
-
-data Options = Options
-  { optDir    :: FilePath
-  , optSuffix :: String
-  , optPragma :: Bool
-  , optInputs :: [FilePath]
-  } deriving (Show)
-
 
 readCliOpts :: App Options
 readCliOpts =
@@ -70,8 +61,8 @@ app = readCliOpts >>= \o ->
       in do
         txt     <- lift $ B.readFile path
         protos  <- mapEither show $ Parser.parseProto name txt
-        structs <- point $ Convert.collect protos
-        code    <- point $ Generator.generate structs
+        structs <- Convert.collect protos
+        code    <- Generator.generate structs
         lift $ writeFile target (unpack code)
 
   in do

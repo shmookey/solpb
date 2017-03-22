@@ -16,6 +16,7 @@ import Util
 decoderName :: FieldType -> Name
 decoderName ft = T.concat $ case ft of
   User x _ -> ["_decode__", x]
+  Sol x _  -> ["_pb_decode_sol_", fieldTypeName ft]
   _        -> ["_pb_decode_", fieldTypeName ft]
 
 -- | Name of the reader function for a field
@@ -31,12 +32,11 @@ counterVar :: Int -> Name
 counterVar i = T.concat ["counts[", pack $ show  (i - 1), "]"]
 
 -- | Determine the type of the field counter structure
-counterType :: Generator Name
-counterType = (Map.size <$> getFields) >>= \sz ->
-  return $ T.concat ["uint[", pack (show sz), "] memory"]
+counterType :: Int -> Name
+counterType n = T.concat ["uint[", pack $ show n, "] memory"]
 
-generate :: Generator Code
-generate = 
+generate :: Struct -> Code
+generate struct@(Struct name fields) = 
   let
     tmpl = pack
        $ "  // Decoder section                           \n"
@@ -46,24 +46,26 @@ generate =
       ++ "  $fieldReaders                                \n"
       ++ "  $structDecoders                              \n"
       ++ "  $pbDecoders                                  \n"
-  in do
-    fields    <- getFields
-    main      <- mainDecoder <$> getName
-    inner     <- innerDecoder
-    readers   <- T.concat <$> mapM (uncurry fieldReader) (Map.toList fields)
-    structDec <- return . T.concat . map structDecoder . nub
-                        . map fieldTypeName . snd . unzip . Map.elems
-                        $ Map.filter (isStruct . snd) fields
-    return $ format tmpl
-      [ ("mainDecoder",    stripStart main)
-      , ("innerDecoder",   stripStart inner)
-      , ("fieldReaders",   stripStart readers)
-      , ("structDecoders", stripStart structDec)
+
+    n              = Map.size fields
+    mainDecoder    = generateMainDecoder name
+    innerDecoder   = generateInnerDecoder struct
+    fieldReaders   = T.concat . map (uncurry $ generateFieldReader name n) 
+                     $ Map.toList fields
+    structDecoders = T.concat . map generateStructDecoder . nub
+                     . map fieldTypeName . snd . unzip . Map.elems
+                     $ Map.filter (isStruct . snd) fields
+  in
+    format tmpl
+      [ ("mainDecoder",    stripStart mainDecoder)
+      , ("innerDecoder",   stripStart innerDecoder)
+      , ("fieldReaders",   stripStart fieldReaders)
+      , ("structDecoders", stripStart structDecoders)
       , ("pbDecoders",     stripStart pbDecoders)
       ]
 
-mainDecoder :: Name -> Code
-mainDecoder name =
+generateMainDecoder :: Name -> Code
+generateMainDecoder name =
   let
     tmpl = pack
        $ "  function decode(bytes bs) internal constant returns ($name) { \n"
@@ -73,8 +75,8 @@ mainDecoder name =
   in
     format tmpl [("name", name)]
 
-innerDecoder :: Generator Code
-innerDecoder =
+generateInnerDecoder :: Struct -> Code
+generateInnerDecoder (Struct name fields) =
   let
     tmpl = pack
        $ "  function _decode(uint p, bytes bs, uint sz)                 \n"
@@ -101,7 +103,7 @@ innerDecoder =
       ++ "  }                                                           \n"
 
     -- | `fieldHandler i ft firstPass` handles a field by ID, type and pass
-    fieldHandler :: Bool -> Int -> (Name, FieldType) -> Code
+    fieldHandler :: Bool -> Int -> Field -> Code
     fieldHandler firstPass i (name, ft) =
       let
         tmpl = pack
@@ -123,14 +125,14 @@ innerDecoder =
         format tmpl ctx
 
     -- | Make code to initialise an array field's length from its counter
-    arrayAllocator :: Int -> (Name, FieldType) -> Code
+    arrayAllocator :: Int -> Field -> Code
     arrayAllocator i (name, ft) = format line ctx
       where line = "    r.$name = new $typ($counter);"
             ctx  = [("name", name), ("typ", typ), ("counter", counterVar i)]
             typ  = fieldType ft
 
     -- | `handlers True` generates field handlers for the first pass
-    handlers :: Bool -> Map Int (Name, FieldType) -> Code
+    handlers :: Bool -> Map Int Field -> Code
     handlers firstPass = 
         flip T.append "      else throw;"                  -- insert closing 'else'
       . T.drop 5 . T.stripStart                            -- delete leading 'else'
@@ -138,28 +140,24 @@ innerDecoder =
       . Map.toList
 
     -- | Generate array allocators
-    allocators :: Map Int (Name, FieldType) -> Code
+    allocators :: Map Int Field -> Code
     allocators = T.intercalate "\n"
       . map (uncurry arrayAllocator)
       . Map.toList
       . Map.filter (isRepeated . snd)
 
-  in do
-    fields <- getFields
-    name   <- getName
-    ctype  <- counterType
-    ctx    <- return
+  in
+    format tmpl
       [ ("name",       name)
-      , ("ctype",      ctype)
+      , ("ctype",      counterType $ Map.size fields)
       , ("firstPass",  handlers True fields)
       , ("secondPass", handlers False fields)
       , ("allocators", stripStart $ allocators fields)
       ]
-    return $ format tmpl ctx
 
 -- | Generate a decoder for a specified type of struct
-structDecoder :: Name -> Code
-structDecoder name =
+generateStructDecoder :: Name -> Code
+generateStructDecoder name =
   let
     tmpl = pack
        $ "  function _decode__$name(uint p, bytes bs, WireType wt)   \n"
@@ -177,9 +175,9 @@ structDecoder name =
   in
     format tmpl ctx
  
--- | Generate a field reader/setter
-fieldReader :: Int -> (Name, FieldType) -> Generator Code
-fieldReader i (name, ft) =
+-- | Generate a field reader/setter. `n` denotes total number of fields
+generateFieldReader :: Name -> Int -> Int -> Field -> Code
+generateFieldReader struct n i (name, ft) =
   let
     tmpl = pack
        $ "  function $fn(uint p, bytes bs, WireType wt, $msg r, $ctype counts) \n"
@@ -197,18 +195,15 @@ fieldReader i (name, ft) =
     target = case fieldLabel ft of
       Repeated -> format "$x[r.$x.length-$c]" [("x", name), ("c", counter)]
       _        -> name
-  in do
-    ctype  <- counterType
-    struct <- getName
-    ctx    <- return
+  in
+    format tmpl   
       [ ("fn",        readerName name)
       , ("msg",       struct)
-      , ("ctype",     ctype)
+      , ("ctype",     counterType n)
       , ("decoder",   decoderName ft)
       , ("counter",   counter)
       , ("target",    target)
       ]
-    return $ format tmpl ctx
 
 -- | Common protocol buffers implementation library
 pbDecoders :: Code
@@ -346,5 +341,30 @@ pbDecoders = pack
   ++ "      end:                                                    \n"
   ++ "    }                                                         \n"
   ++ "    return (b, sz+len);                                       \n"
+  ++ "  }                                                           \n"
+  ++ "  function _pb_decode_sol_bytesN(uint8 n, uint p, bytes bs)   \n"
+  ++ "      internal constant returns (bytes32, uint) {             \n"
+  ++ "    uint r;                                                   \n"
+  ++ "    var (len, sz) = _pb_decode_varint(p, bs);                 \n"
+  ++ "    if (len + sz != n + 3) throw;                             \n"
+  ++ "    p += 3;                                                   \n"
+  ++ "    assembly { r := mload(add(p,bs)) }                        \n"
+  ++ "    for (uint i=n; i<32; i++)                                 \n"
+  ++ "      r /= 256;                                               \n"
+  ++ "    return (bytes32(r), n + 3);                               \n"
+  ++ "  }                                                           \n"
+  ++ "  function _pb_decode_sol_address(uint p, bytes bs, WireType) \n"
+  ++ "      internal constant returns (address, uint) {             \n"
+  ++ "    var (r, sz) = _pb_decode_sol_bytesN(20, p, bs);           \n"
+  ++ "    return (address(r), sz);                                  \n"
+  ++ "  }                                                           \n"
+  ++ "  function _pb_decode_sol_uint(uint p, bytes bs, WireType)    \n"
+  ++ "      internal constant returns (uint, uint) {                \n"
+  ++ "    var (r, sz) = _pb_decode_sol_bytesN(20, p, bs);           \n"
+  ++ "    return (uint(r), sz);                                     \n"
+  ++ "  }                                                           \n"
+  ++ "  function _pb_decode_sol_bytes32(uint p, bytes bs, WireType) \n"
+  ++ "      internal constant returns (bytes32, uint) {             \n"
+  ++ "    return _pb_decode_sol_bytesN(32, p, bs);                  \n"
   ++ "  }                                                           \n"
 

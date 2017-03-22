@@ -16,11 +16,11 @@ import Types
 import Util
 
 
-generate :: State -> Result String Code
-generate = snd . runResultant createLibrary
+generate :: Struct -> App Code
+generate struct = return $ createLibrary struct
 
-createLibrary :: Generator Code
-createLibrary =
+createLibrary :: Struct -> Code
+createLibrary struct@(Struct name fields) =
   let
     tmpl = pack
        $  "library $name {               \n"
@@ -30,30 +30,29 @@ createLibrary =
       ++  "  $storeFunction              \n"
       ++  "  $utilityFunctions           \n"
       ++  "}                             \n"
-  in do
-    name           <- getName
-    fields         <- getFields
-    decoderSection <- Decode.generate
-    encoderSection <- Encode.generate
-    
-    return $ format tmpl
+
+    decoderSection = Decode.generate struct
+    encoderSection = Encode.generate struct
+
+  in    
+    format tmpl
       [ ("name",             libraryName name)
-      , ("structDefinition", strip $ structDefinition name fields)
+      , ("structDefinition", strip $ structDefinition struct)
       , ("decoderSection",   strip $ decoderSection)
       , ("encoderSection",   strip $ encoderSection)
       , ("utilityFunctions", strip $ utilityFunctions name)
-      , ("storeFunction",    strip $ storeFunction name fields)
+      , ("storeFunction",    strip $ storeFunction struct)
       ]
 
-structDefinition :: Name -> Map Int (Name, FieldType) -> Code
-structDefinition name kvs =
+structDefinition :: Struct -> Code
+structDefinition (Struct name kvs) =
   let
     tmpl = pack
        $ "  struct $name {    \n"
      ++  "    $fields         \n"
      ++  "  }                 \n"
 
-    formatField :: (Name, FieldType) -> Code
+    formatField :: Field -> Code
     formatField (x, ft) = format "    $type $name; \n"
       [("name", x), ("type", fieldType ft)]
 
@@ -78,8 +77,8 @@ utilityFunctions name =
   in
     format tmpl [("name", name)]
 
-storeFunction :: Name -> Map Int (Name, FieldType) -> Code
-storeFunction name kvs =
+storeFunction :: Struct -> Code
+storeFunction (Struct name kvs) =
   let
     tmpl = pack
        $ "  function store($x memory input, $x storage output) internal { \n"
