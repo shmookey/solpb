@@ -18,6 +18,7 @@ module Control.Monad.Resultant
 
 import Prelude hiding (fail)
 import Data.Functor.Identity (Identity(runIdentity))
+import Control.Exception (SomeException, try)
 
 import Control.Monad.Result (Result(Ok, Err), mapError)
 
@@ -64,7 +65,7 @@ class Monad m => ResultantMonad m e where
 instance ResultantMonad (Result e) e where
   point   = id 
   reflect = return
---  fail s = Err s
+  fail s  = Err s
 
 
 -- ResultantT

@@ -1,14 +1,21 @@
 module Main where
 
-import Data.Text (Text, pack, unpack)
+import Control.Monad.Extra (unlessM)
+import Options.Applicative ((<>))
+import Data.Text (unpack)
+import System.Directory (createDirectory, doesDirectoryExist)
+import qualified Text.ProtocolBuffers.ProtoCompile.Parser as Parser
 import qualified Options.Applicative as Opts
 import qualified Data.ByteString.Lazy as B
-import Options.Applicative ((<>))
-import qualified Text.ProtocolBuffers.ProtoCompile.Parser as Parser
-import qualified Text.DescriptorProtos.FileDescriptorProto as Proto
-import System.Directory (createDirectory, doesDirectoryExist)
+import qualified System.FilePath as FilePath
+
+import Control.Monad.Result
+import Control.Monad.Resultant
 import Convert
-import Data.List (intercalate)
+import Generator
+import Types
+
+type App = ResultantT IO () String
 
 data Options = Options
   { optDir    :: FilePath
@@ -18,9 +25,9 @@ data Options = Options
   } deriving (Show)
 
 
-readCliOpts :: IO Options
+readCliOpts :: App Options
 readCliOpts =
-  Opts.execParser $ Opts.info (Opts.helper <*> cliOpts)
+  lift . Opts.execParser $ Opts.info (Opts.helper <*> cliOpts)
     ( Opts.fullDesc
    <> Opts.header   "solpb -- protocol buffers for solidity" 
    <> Opts.progDesc "Generate solidity libraries for working with protocol buffers." )
@@ -44,33 +51,38 @@ readCliOpts =
           ( Opts.metavar "FILE [FILES...]"
          <> Opts.help    "Path to input file(s)" ))
 
-processDescriptor :: Bool -> FilePath -> String -> Proto.FileDescriptorProto -> IO ()
-processDescriptor pragma outDir suffix file =
+app :: App ()
+app = readCliOpts >>= \o ->
   let
-    header          = if pragma then "pragma solidity ^0.4.1;\n\n" else ""
-    writeSrc (k, v) = writeFile (outDir ++ "/" ++ k ++ suffix ++ ".sol") (header ++ v)
-  in
-    mapM_ writeSrc . map (\(k,v) -> (unpack k, unpack v)) $ Convert.convert file
+    inputFiles   = optInputs o
+    outputDir    = optDir o
+    outputSuffix = optSuffix o
+
+    outputTarget :: String -> FilePath
+    outputTarget baseName = FilePath.combine outputDir fullName
+      where fullName = baseName ++ outputSuffix ++ ".sol"
+
+    processFile :: FilePath -> App ()
+    processFile path = 
+      let
+        name   = FilePath.takeBaseName path
+        target = outputTarget name
+      in do
+        txt     <- lift $ B.readFile path
+        protos  <- mapEither show $ Parser.parseProto name txt
+        structs <- point $ Convert.collect protos
+        code    <- point $ Generator.generate structs
+        lift $ writeFile target (unpack code)
+
+  in do
+    lift $ unlessM (doesDirectoryExist outputDir) (createDirectory outputDir)
+    mapM_ processFile inputFiles
 
 main :: IO ()
-main = readCliOpts >>= \o ->
-  let
-    inputs = optInputs o
-    outDir = optDir o
-    suffix = optSuffix o
-    pragma = optPragma o
+main = do
+  (_, r) <- runResultantT app ()
+  case r of
+    Ok xs -> return ()
+    Err e -> putStrLn $ "Error: " ++ e
 
-    procResult r = case r of
-      Left e  -> putStrLn $ show e
-      Right x -> processDescriptor pragma outDir suffix x
-      
-  in do
-    results <- mapM (\x -> Parser.parseProto x <$> B.readFile x) inputs
-
-    dirExists <- doesDirectoryExist outDir
-    if not dirExists
-    then createDirectory outDir
-    else return ()
-
-    mapM_ procResult results
 

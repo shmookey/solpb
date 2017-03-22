@@ -9,7 +9,6 @@ import Data.Map (Map)
 import Data.Text (Text, pack, strip, stripStart)
 import Data.List (nub)
 
-import Gen
 import Types
 import Util
 
@@ -32,11 +31,11 @@ counterVar :: Int -> Name
 counterVar i = T.concat ["counts[", pack $ show  (i - 1), "]"]
 
 -- | Determine the type of the field counter structure
-counterType :: Gen Name
+counterType :: Generator Name
 counterType = (Map.size <$> getFields) >>= \sz ->
   return $ T.concat ["uint[", pack (show sz), "] memory"]
 
-generate :: Gen Code
+generate :: Generator Code
 generate = 
   let
     tmpl = pack
@@ -74,7 +73,7 @@ mainDecoder name =
   in
     format tmpl [("name", name)]
 
-innerDecoder :: Gen Code
+innerDecoder :: Generator Code
 innerDecoder =
   let
     tmpl = pack
@@ -179,7 +178,7 @@ structDecoder name =
     format tmpl ctx
  
 -- | Generate a field reader/setter
-fieldReader :: Int -> (Name, FieldType) -> Gen Code
+fieldReader :: Int -> (Name, FieldType) -> Generator Code
 fieldReader i (name, ft) =
   let
     tmpl = pack

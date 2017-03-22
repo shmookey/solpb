@@ -1,13 +1,12 @@
 {-# LANGUAGE NamedFieldPuns #-}
-{-# LANGUAGE OverloadedStrings #-}
 
 module Convert where
 
+import Prelude hiding (fail)
 import Data.Foldable (toList)
 import Data.Map (Map)
-import qualified Data.Map as Map
-import Data.Maybe (catMaybes)
 import Data.Text (pack)
+import qualified Data.Map as Map
 
 import Text.DescriptorProtos.FileDescriptorProto
   (FileDescriptorProto(FileDescriptorProto, message_type))
@@ -15,64 +14,64 @@ import Text.DescriptorProtos.FieldDescriptorProto
   (FieldDescriptorProto(FieldDescriptorProto, label, name, number, type', type_name))
 import Text.DescriptorProtos.DescriptorProto
   (DescriptorProto(DescriptorProto, field, nested_type))
-import Text.ProtocolBuffers.Basic (uToString)
-import qualified Text.DescriptorProtos.FieldDescriptorProto as FieldDescriptorProto
-import qualified Text.DescriptorProtos.DescriptorProto as DescriptorProto
-import qualified Text.DescriptorProtos.FieldDescriptorProto.Type as FieldType
-import qualified Text.DescriptorProtos.FieldDescriptorProto.Label as FieldLabel
+import Text.ProtocolBuffers.Basic (Utf8, uToString)
+import qualified Text.DescriptorProtos.FieldDescriptorProto as FDP
+import qualified Text.DescriptorProtos.DescriptorProto as DP
+import qualified Text.DescriptorProtos.FieldDescriptorProto.Type as FT
+import qualified Text.DescriptorProtos.FieldDescriptorProto.Label as FL
 
 import Control.Monad.Result
+import Control.Monad.Resultant
 
-import Gen
 import Types
-import qualified Library
 
-convert :: FileDescriptorProto -> [(Name, Code)]
-convert (FileDescriptorProto {message_type}) =
+
+collect :: FileDescriptorProto -> Result String [State]
+collect (FileDescriptorProto {message_type}) =
   let
-    protos = map (\(x,kvs) -> (x, (force $ Library.run x kvs)))
-             . map extractStruct
-             . concat 
-             $ fmap allDescriptorProtos message_type
-    force (Ok code) = code
+    findAll :: DescriptorProto -> [DescriptorProto]
+    findAll x@(DescriptorProto {field, nested_type}) =
+      case toList nested_type of 
+        [] -> [x]
+        xs -> x:(concatMap findAll xs)
   in
-    protos
+    mapM create . concatMap findAll $ toList message_type
 
-allDescriptorProtos :: DescriptorProto -> [DescriptorProto]
-allDescriptorProtos x@(DescriptorProto {field, nested_type}) =
-  case toList nested_type of 
-    [] -> [x]
-    xs -> x:(concat $ map allDescriptorProtos xs)
-
-extractStruct :: DescriptorProto -> (Name, Map Int (Name, FieldType))
-extractStruct srcStruct@(DescriptorProto {field=srcFields}) =
+create :: DescriptorProto -> Result String State
+create src@(DescriptorProto {field}) =
   let
-    fields = Map.fromList . catMaybes . toList $ fmap fieldProps srcFields
-
-    fieldProps :: FieldDescriptorProto -> Maybe (Int, (Name, FieldType))
+    fieldProps :: FieldDescriptorProto -> Result String (Int, (Name, FieldType))
     fieldProps src = do
-      num   <- fromIntegral       <$> FieldDescriptorProto.number src
-      name  <- (pack . uToString) <$> FieldDescriptorProto.name src
-      label <- convertLabel       <$> FieldDescriptorProto.label src
-      ft    <- return $ getFieldType src label
+      num  <- fromIntegral <$> fromMaybe "missing field number" (FDP.number src)
+      name <- toName       <$> fromMaybe "missing field name"   (FDP.name src)
+      lbl  <- convertLabel <$> fromMaybe "missing field label"  (FDP.label src)
+      ft   <- getFieldType src lbl
       return (num, (name, ft))
  
-    convertLabel :: FieldLabel.Label -> Label
-    convertLabel x = case x of
-      FieldLabel.LABEL_OPTIONAL -> Optional
-      FieldLabel.LABEL_REQUIRED -> Required
-      FieldLabel.LABEL_REPEATED -> Repeated
-
-    getFieldType :: FieldDescriptorProto -> Label -> FieldType
-    getFieldType (FieldDescriptorProto {type', type_name}) =
+    getFieldType :: FieldDescriptorProto -> Label -> Result String FieldType
+    getFieldType (FieldDescriptorProto {type', type_name}) label =
       case (type', type_name) of
-        (Just FieldType.TYPE_UINT32, _) -> Prim "uint32"
-        (Just FieldType.TYPE_UINT64, _) -> Prim "uint64"
-        (Just FieldType.TYPE_STRING, _) -> Ref "string"
-        (Just FieldType.TYPE_BYTES, _)  -> Ref "bytes"
-        (Nothing, Just x)               -> User . pack $ uToString x
+        (Just FT.TYPE_UINT32, _) -> return $ Prim (pack "uint32") label
+        (Just FT.TYPE_UINT64, _) -> return $ Prim (pack "uint64") label
+        (Just FT.TYPE_STRING, _) -> return $ Ref (pack "string") label
+        (Just FT.TYPE_BYTES, _)  -> return $ Ref (pack "bytes") label
+        (Just x, _)              -> fail $ "unsupported field type: " ++ (show x)
+        (Nothing, Just x)        -> return $ User (toName x) label
+        _                        -> fail "missing field type"
 
-  in case DescriptorProto.name srcStruct of
-    Just name  -> (pack $ uToString name, fields)
-    _          -> error "Message type must have a name."
+    convertLabel :: FL.Label -> Label
+    convertLabel x = case x of
+      FL.LABEL_OPTIONAL -> Optional
+      FL.LABEL_REQUIRED -> Required
+      FL.LABEL_REPEATED -> Repeated
+
+    toName :: Utf8 -> Name
+    toName = pack . uToString
+
+  in do 
+    name   <- toName <$> fromMaybe "missing message type name" (DP.name src)
+    fields <- Map.fromList <$> mapM fieldProps (toList field)
+    return $ State name fields
+
+
 

@@ -12,64 +12,37 @@ import Control.Monad.Result
 
 import qualified Decode
 import qualified Encode
-import Gen
 import Types
 import Util
 
 
-run :: Name -> Map Int (Name, FieldType) -> Result Error Code
-run x kvs = snd . runResultant createLibrary $ State mempty x kvs
+generate :: State -> Result String Code
+generate = snd . runResultant createLibrary
 
-createLibrary :: Gen Code
+createLibrary :: Generator Code
 createLibrary =
   let
     tmpl = pack
-       $  "pragma solidity $solidityVersion;                                       \n"
-      ++  "                                                                        \n"
-      ++  "// AUTO-GENERATED FILE - DO NOT EDIT                                    \n"
-      ++  "//                                                                      \n"
-      ++  "// This file was generated automatically by solpb from data structures  \n"
-      ++  "// defined elsewhere. Instead of editing this file, consider modifying  \n"
-      ++  "// the source schema or writing a separate library.                     \n" 
-      ++  "//                                                                      \n"
-      ++  "// solpb is a free and open-source implementation of protocol buffers   \n"
-      ++  "// for Solidity. Protocol buffers are an efficient serialisation format \n"
-      ++  "// for structured data developed by Google. More information about this \n"
-      ++  "// project is available from the repository page:                       \n"
-      ++  "//                                                                      \n"
-      ++  "//   http://github.com/CBAInnovationLab/protobuf-solidity               \n"
-      ++  "//                                                                      \n"
-      ++  "// Further information about protocol buffers, including tutorials and  \n"
-      ++  "// downloads for implementations in most major languages is available at\n"
-      ++  "// the protocol buffers website:                                        \n"
-      ++  "//                                                                      \n"
-      ++  "//   https://developers.google.com/protocol-buffers/                    \n"
-      ++  "//                                                                      \n"
-      ++  "//  Development of solpb is proudly sponsored by the Innovation Lab at  \n"
-      ++  "//  the Commonwealth Bank of Australia.                                 \n"
-      ++  "                                                                        \n"
-      ++  "library $libraryName {                                                  \n"
-      ++  "                                                                        \n"
-      ++  "  $structDefinition                                                     \n"
-      ++  "  $decoderSection                                                       \n"
-      ++  "  $encoderSection                                                       \n"
-      ++  "  $storeFunction                                                        \n"
-      ++  "  $utilityFunctions                                                     \n"
-      ++  "}                                                                       \n"
+       $  "library $name {               \n"
+      ++  "  $structDefinition           \n"
+      ++  "  $decoderSection             \n"
+      ++  "  $encoderSection             \n"
+      ++  "  $storeFunction              \n"
+      ++  "  $utilityFunctions           \n"
+      ++  "}                             \n"
   in do
-    name    <- getName
-    fields  <- getFields
-    decoder <- stripStart <$> Decode.generate
-    encoder <- stripStart <$> Encode.generate
+    name           <- getName
+    fields         <- getFields
+    decoderSection <- Decode.generate
+    encoderSection <- Encode.generate
     
     return $ format tmpl
-      [ ("solidityVersion",  "^0.4.0")
-      , ("libraryName",      libraryName name)
-      , ("structDefinition", stripStart $ structDefinition name fields)
-      , ("decoderSection",   decoder)
-      , ("encoderSection",   encoder)
-      , ("utilityFunctions", stripStart $ utilityFunctions name)
-      , ("storeFunction",    stripStart $ storeFunction name fields)
+      [ ("name",             libraryName name)
+      , ("structDefinition", strip $ structDefinition name fields)
+      , ("decoderSection",   strip $ decoderSection)
+      , ("encoderSection",   strip $ encoderSection)
+      , ("utilityFunctions", strip $ utilityFunctions name)
+      , ("storeFunction",    strip $ storeFunction name fields)
       ]
 
 structDefinition :: Name -> Map Int (Name, FieldType) -> Code
@@ -81,10 +54,10 @@ structDefinition name kvs =
      ++  "  }                 \n"
 
     formatField :: (Name, FieldType) -> Code
-    formatField (x, ft) = format "    $type $name;\n" ctx
-      where ctx = [("name", x), ("type", fieldType ft)]
+    formatField (x, ft) = format "    $type $name; \n"
+      [("name", x), ("type", fieldType ft)]
 
-    fields = T.concat . map formatField $ Map.elems kvs
+    fields = Map.foldl (\a -> T.append a . formatField) "" kvs
   in
     format tmpl
       [ ("name",   name)

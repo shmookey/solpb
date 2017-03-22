@@ -2,8 +2,12 @@
 
 module Types where
 
-import qualified Data.Text as T
+import Data.Map (Map)
 import Data.Text (Text)
+import qualified Data.Map as Map
+import qualified Data.Text as T
+
+import Control.Monad.Resultant
 
 
 type Name = Text
@@ -21,15 +25,14 @@ data Label
   | Repeated
   deriving (Show)
 
-data Struct = Struct
-  { structName   :: Name
-  , structFields :: [Field]
+data State = State
+  { stName   :: Name
+  , stFields :: Map Int (Name, FieldType)
   }
 
-data Field = Field 
-  { fieldNumber :: Int
-  , fieldName   :: String
-  }
+type Generator = Resultant State String
+
+
 
 -- | Qualify struct name with its containing library
 qualifiedType :: Name -> Name
@@ -84,4 +87,23 @@ isStruct ft = case ft of
   User _ _ -> True
   _        -> False
 
+
+-- Monad access helpers
+
+addField :: Int -> Name -> FieldType -> Generator ()
+addField i k ft = updateFields $ Map.insert i (k, ft)
+
+-- Basic monad access operations
+
+getName :: Generator Name
+getName = stName <$> getState
+
+getFields :: Generator (Map Int (Name, FieldType))
+getFields = stFields <$> getState
+
+setFields :: Map Int (Name, FieldType) -> Generator ()
+setFields x = updateState $ \st -> st { stFields = x }
+
+updateFields :: (Map Int (Name, FieldType) -> Map Int (Name, FieldType)) -> Generator ()
+updateFields f = getFields >>= setFields . f
 

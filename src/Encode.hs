@@ -7,12 +7,11 @@ import Data.Map (Map)
 import qualified Data.Text as T
 import qualified Data.Map as Map
 
-import Gen
 import Types
 import Util
 
 
-generate :: Gen Code
+generate :: Generator Code
 generate =
   let
     tmpl = pack

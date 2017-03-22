@@ -21,6 +21,8 @@ executable solpb
                      , bytestring
                      , containers
                      , directory
+                     , extra
+                     , filepath
                      , hprotoc
                      , optparse-applicative
                      , protocol-buffers
