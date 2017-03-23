@@ -37,15 +37,15 @@ createLibrary struct@(Struct name fields) =
   in    
     format tmpl
       [ ("name",             libraryName name)
-      , ("structDefinition", strip $ structDefinition struct)
+      , ("structDefinition", strip $ structDefinition True struct)
       , ("decoderSection",   strip $ decoderSection)
       , ("encoderSection",   strip $ encoderSection)
       , ("utilityFunctions", strip $ utilityFunctions name)
       , ("storeFunction",    strip $ storeFunction struct)
       ]
 
-structDefinition :: Struct -> Code
-structDefinition (Struct name kvs) =
+structDefinition :: Bool -> Struct -> Code
+structDefinition qualifiedNames (Struct name kvs) =
   let
     tmpl = pack
        $ "  struct $name {    \n"
@@ -53,8 +53,9 @@ structDefinition (Struct name kvs) =
      ++  "  }                 \n"
 
     formatField :: Field -> Code
-    formatField (x, ft) = format "    $type $name; \n"
-      [("name", x), ("type", fieldType ft)]
+    formatField (x, ft) = format "    $type $name; \n" $
+      if qualifiedNames then [("name", x), ("type", fieldType ft)]
+                        else [("name", x), ("type", fieldTypeName ft)]
 
     fields = Map.foldl (\a -> T.append a . formatField) "" kvs
   in

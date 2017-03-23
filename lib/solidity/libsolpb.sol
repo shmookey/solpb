@@ -226,53 +226,64 @@ library _pb {
     return (address(r), sz);
   }
 
-  function _decode_sol_uint(uint p, bytes bs, WireType)
+  function _decode_sol_uint(uint p, bytes bs, WireType wt)
       internal constant returns (uint, uint) {
-    var (r, sz) = _decode_sol_bytesN(32, p, bs);
-    return (uint(r), sz);
+    return _decode_sol_uint256(p, bs, wt);
   }
 
-  function _decode_sol_intN(uint8 n, uint p, bytes bs, WireType)
-      internal constant returns (int, uint) {
+  function _decode_sol_uintN(uint8 n, uint p, bytes bs)
+      internal constant returns (uint, uint) {
     var (u, sz) = _decode_sol_bytesN(n, p, bs);
-    int r; assembly { r := u }
+    uint r; assembly { r := u }
     return (r, sz);
   }
 
   function _decode_sol_uint8(uint p, bytes bs, WireType)
       internal constant returns (uint8, uint) {
-    var (r, sz) = _decode_sol_intN(1, p, bs);
+    var (r, sz) = _decode_sol_uintN(1, p, bs);
     return (uint8(r), sz);
   }
 
   function _decode_sol_uint16(uint p, bytes bs, WireType)
       internal constant returns (uint16, uint) {
-    var (r, sz) = _decode_sol_intN(2, p, bs);
+    var (r, sz) = _decode_sol_uintN(2, p, bs);
     return (uint16(r), sz);
   }
 
   function _decode_sol_uint32(uint p, bytes bs, WireType)
       internal constant returns (uint32, uint) {
-    var (r, sz) = _decode_sol_intN(4, p, bs);
+    var (r, sz) = _decode_sol_uintN(4, p, bs);
     return (uint32(r), sz);
   }
 
   function _decode_sol_uint64(uint p, bytes bs, WireType)
       internal constant returns (uint64, uint) {
-    var (r, sz) = _decode_sol_intN(8, p, bs);
+    var (r, sz) = _decode_sol_uintN(8, p, bs);
     return (uint64(r), sz);
   }
 
   function _decode_sol_uint128(uint p, bytes bs, WireType)
       internal constant returns (uint128, uint) {
-    var (r, sz) = _decode_sol_intN(16, p, bs);
+    var (r, sz) = _decode_sol_uintN(16, p, bs);
     return (uint128(r), sz);
   }
 
   function _decode_sol_uint256(uint p, bytes bs, WireType)
       internal constant returns (uint256, uint) {
-    var (r, sz) = _decode_sol_intN(32, p, bs);
+    var (r, sz) = _decode_sol_uintN(32, p, bs);
     return (uint256(r), sz);
+  }
+
+  function _decode_sol_int(uint p, bytes bs, WireType wt)
+      internal constant returns (int, uint) {
+    return _decode_sol_int256(p, bs, wt);
+  }
+
+  function _decode_sol_intN(uint8 n, uint p, bytes bs)
+      internal constant returns (int, uint) {
+    var (u, sz) = _decode_sol_bytesN(n, p, bs);
+    int r; assembly { r := u }
+    return (r, sz);
   }
 
   function _decode_sol_int8(uint p, bytes bs, WireType)

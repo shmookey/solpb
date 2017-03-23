@@ -6,6 +6,7 @@ import Data.Text.Template (Context)
 import Data.Text (Text, pack, unpack)
 import Data.Text.Lazy (toStrict)
 import qualified Data.Text.Template as Template
+import qualified Data.Text as T
 
 
 context :: [(Text, Text)] -> Context
@@ -15,4 +16,7 @@ context kvs k = case lookup k kvs of
 
 format :: Text -> [(Text, Text)] -> Text
 format tmpl = toStrict . Template.substitute tmpl . context
+
+stripLineEndings :: Text -> Text
+stripLineEndings = T.unlines . map T.stripEnd . T.lines
 
