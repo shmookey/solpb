@@ -2,7 +2,7 @@ pragma solidity ^0.4.0;
 
 library _pb {
 
-    enum WireType { Varint, Fixed64, LengthDelim, Fixed32 } 
+    enum WireType { Varint, Fixed64, LengthDelim, Fixed32 }
 
     // Decoders
 
@@ -157,32 +157,108 @@ library _pb {
 
   // Encoders
 
-  function _encode_key(uint i, WireType wt, uint p, bytes bs)
+  function _encode_key(uint x, WireType wt, uint p, bytes bs)
       internal constant returns (uint) {
+    uint i;
+    assembly {
+      i := or(mul(x, 8), mod(wt, 8))
+    }
+    return _encode_varint(i, p, bs);
   }
-  function _encode_varint(uint i, uint p, bytes bs)
+  function _encode_varint(uint x, uint p, bytes bs)
       internal constant returns (uint) {
+    uint sz = 0;
+    assembly {
+      let bsptr := add(bs, p)
+      let byt := 0
+      let pbyt := 0
+      loop:
+        byt := and(div(x, exp(2, mul(7, sz))), 0x7f)
+        pbyt := and(div(x, exp(2, mul(7, add(sz, 1)))), 0x7f)
+        jumpi(end, eq(pbyt, 0))
+        mstore8(bsptr, or(0x80, byt))
+        bsptr := add(bsptr, 1)
+        sz := add(sz, 1)
+        jump(loop)
+      end:
+        byt := and(div(x, exp(2, mul(7, sz))), 0x7f)
+        mstore8(bsptr, byt)
+        sz := add(sz, 1)
+    }
+    return sz;
   }
-  function _encode_varints(int i, uint p, bytes bs)
+  function _encode_varints(int x, uint p, bytes bs)
       internal constant returns (uint) {
+    uint encodedInt = zigZagEncode(x);
+    return _encode_varint(encodedInt, p, bs);
   }
   function _encode_bytes(bytes xs, uint p, bytes bs)
       internal constant returns (uint) {
+    uint xsLength = xs.length;
+    uint sz = _encode_varint(xsLength, p, bs);
+    uint count = 0;
+    assembly {
+      let bsptr := add(bs, add(p, sz))
+      let xsptr := add(xs, 32)
+      loop:
+        jumpi(end, eq(count, xsLength))
+        mstore8(bsptr, byte(0, mload(xsptr)))
+        bsptr := add(bsptr, 1)
+        xsptr := add(xsptr, 1)
+        count := add(count, 1)
+        jump(loop)
+      end:
+    }
+    return sz+count;
   }
   function _encode_string(string xs, uint p, bytes bs)
       internal constant returns (uint) {
+    return  _encode_bytes(bytes(xs), p, bs);
   }
   function _encode_uint32f(uint32 x, uint p, bytes bs)
       internal constant returns (uint) {
+    return _encode_uintf(x, p, bs, 4);
   }
   function _encode_uint64f(uint64 x, uint p, bytes bs)
       internal constant returns (uint) {
+    return _encode_uintf(x, p, bs, 8);
   }
   function _encode_int32f(int32 x, uint p, bytes bs)
       internal constant returns (uint) {
+    uint encodedInt = zigZagEncode(x);
+    return _encode_uintf(encodedInt, p, bs, 4);
   }
   function _encode_int64f(int64 x, uint p, bytes bs)
       internal constant returns (uint) {
+    uint encodedInt = zigZagEncode(x);
+    return _encode_uintf(encodedInt, p, bs, 8);
+  }
+  function _encode_uintf(uint x, uint p, bytes bs, uint sz)
+    internal constant returns (uint) {
+    assembly {
+      let bsptr := add(bs, p)
+      let count := sz
+      loop:
+        jumpi(end, eq(count, 0))
+        mstore8(bsptr, byte(sub(32, count), x))
+        bsptr := add(bsptr, 1)
+        count := sub(count, 1)
+        jump(loop)
+      end:
+    }
+    return sz;
+  }
+  function zigZagEncode(int i) internal returns (uint) {
+    uint encodedInt;
+    int x = -1;
+    assembly {
+      let mask := 0
+      jumpi(next, sgt(i, 0))
+      mask := x
+      next:
+        encodedInt := xor(mul(i, 2), mask)
+    }
+    return encodedInt;
   }
 
   // Estimators
