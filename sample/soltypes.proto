@@ -1,0 +1,5 @@
+message MyStruct {
+  required solidity.address recipient = 1;
+  required solidity.bytes16 uuid = 2;
+}
+
