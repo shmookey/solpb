@@ -1,3 +1,5 @@
+{-# LANGUAGE TemplateHaskell #-}
+
 module Main where
 
 import Control.Monad.Extra (unlessM)
@@ -14,7 +16,7 @@ import Control.Monad.Resultant
 import Convert
 import Generator
 import Types
-
+import qualified Build
 
 readCliOpts :: App Options
 readCliOpts =

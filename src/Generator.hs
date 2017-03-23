@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 module Generator where
 
@@ -11,6 +12,7 @@ import Control.Monad.Result
 import Types
 import Util
 import qualified Library
+import qualified Build
 
 
 generate :: [Struct] -> App Code
@@ -42,6 +44,7 @@ generate structs =
       ++  "//  the Commonwealth Bank of Australia.                                 \n"
       ++  "                                                                        \n"
       ++  "$codecLibraries                                                         \n"
+      ++  "$runtimeLibrary                                                         \n"
       ++  "                                                                        \n"
   in do
     codecLibraries <- T.concat <$> mapM Library.generate structs
@@ -49,6 +52,7 @@ generate structs =
     return $ format tmpl
       [ ("solidityVersion",  "^0.4.0")
       , ("codecLibraries",   strip codecLibraries)
+      , ("runtimeLibrary",   $(Build.pbLibrary))
       ]
 
 

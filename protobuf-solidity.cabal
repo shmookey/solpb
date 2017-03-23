@@ -29,4 +29,5 @@ executable solpb
                      , protocol-buffers-descriptor
                      , split
                      , template
+                     , template-haskell
                      , text
