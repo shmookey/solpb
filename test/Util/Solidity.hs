@@ -19,10 +19,28 @@ import Types
 compile :: Text -> Code -> App Text
 compile name code = 
   let
-    heading = T.concat ["======= ", name, " ======="]
-  in lift . Sh.shelly . Sh.silently $ do
-    out <- (return code) -|- Sh.run "solc" ["--bin-runtime"]
-    return . (!! 2) . T.lines . snd $ T.breakOn heading out
+    onFailure :: String -> App Text
+    onFailure err =
+      let x = unpack name
+      in do
+        lift . putStrLn $ "Error compiling contract " ++ x
+        lift . putStrLn $ "The command output was: " ++ err
+        lift $ writeFile (x ++ "-dump.sol") (unpack code)
+        lift . putStrLn $ "Contract code dumped to: " ++ x ++ "-dump.sol"
+        -- lift . putStrLn $ "Command output: " ++ output
+        fail $ "Error compiling contract: " ++ err
+
+    heading = T.concat ["======= <stdin>:", name, " ======="]
+
+  in recoverWith onFailure $ do
+    (retVal, output) <- lift . Sh.shelly . Sh.errExit False . Sh.silently
+      $ do output <- (return code) -|- Sh.run "solc" ["--bin-runtime"]
+           retVal <- Sh.lastExitCode
+           err    <- Sh.lastStderr
+           return (retVal, T.append output err)
+    case retVal of
+      0 -> return . (!! 2) . T.lines . snd $ T.breakOn heading output
+      _ -> fail $ unpack output
 
 run :: Text -> Text -> App Text
 run code input = do

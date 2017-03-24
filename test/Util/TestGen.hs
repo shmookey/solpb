@@ -54,7 +54,6 @@ generateTestContract (Struct name fields) kvs =
     , ("fieldSetters", fieldSetters)
     ]
 
-
 onFailure :: Code -> Code -> String -> String -> String -> App Text
 onFailure code callData objData testName err = do
   lift . putStrLn $ "Failed: "                 ++ testName
