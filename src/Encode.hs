@@ -20,15 +20,11 @@ generate struct@(Struct name _) =
       ++ "  $mainEncoder                       \n"
       ++ "  $innerEncoder                      \n"
       ++ "  $estimator                         \n"
-      ++ "  $pbHelpers                         \n"
-      ++ "  $soltypeEncoders                   \n"
   in
     format tmpl
       [ ("mainEncoder",     strip $ generateMainEncoder name)
       , ("innerEncoder",    strip $ generateInnerEncoder struct)
       , ("estimator",       strip $ generateEstimator struct)
-      , ("pbHelpers",       strip pbHelpers)
-      , ("soltypeEncoders", strip soltypeEncoders)
       ]
 
 generateMainEncoder :: Name -> Code
@@ -58,7 +54,7 @@ generateInnerEncoder (Struct name fields) =
       ++ "  }                                                            \n"
 
     wireType :: FieldType -> Code
-    wireType ft = T.append "WireType." $ case ft of
+    wireType ft = T.append "_pb.WireType." $ case ft of
       Prim "uint32" _ -> "Fixed32"
       Prim "int32" _  -> "Fixed32"
       Prim "uint64" _ -> "Fixed64"
@@ -69,16 +65,16 @@ generateInnerEncoder (Struct name fields) =
 
     encoderName :: FieldType -> Code
     encoderName ft = case ft of
-      Prim "uint32" _ -> "_pb_encode_uint32f"
-      Prim "int32" _  -> "_pb_encode_int32f"
-      Prim "uint64" _ -> "_pb_encode_uint64f"
-      Prim "int64" _  -> "_pb_encode_int64f"
-      Ref x _         -> T.append "_pb_encode_" x
+      Prim "uint32" _ -> "_pb._encode_uint32f"
+      Prim "int32" _  -> "_pb._encode_int32f"
+      Prim "uint64" _ -> "_pb._encode_uint64f"
+      Prim "int64" _  -> "_pb._encode_int64f"
+      Ref x _         -> T.append "_pb._encode_" x
       User x _        -> T.append (libraryName x) "._encode"
-      Sol x _         -> T.append "_pb_encode_sol_" x
-    
+      Sol x _         -> T.append "_pb._encode_sol_" x
+
     fieldEncoder :: Int -> Field -> Code
-    fieldEncoder i (k, ft) = 
+    fieldEncoder i (k, ft) =
       let
         ctx = [ ("k",       k)
               , ("i",       pack $ show i)
@@ -87,18 +83,18 @@ generateInnerEncoder (Struct name fields) =
               ]
       in flip format ctx $ case isRepeated ft of
         False -> pack
-           $ "    p += _pb_encode_key($i, $wt, p, bs);   \n"
+           $ "    p += _pb._encode_key($i, $wt, p, bs);  \n"
           ++ "    p += $encoder(r.$k, p, bs);            \n"
         True -> pack
            $ "    for(i=0; i<r.$k.length; i++) {         \n"
-          ++ "      p += _pb_encode_key($i, $wt, p, bs); \n"
+          ++ "      p += _pb._encode_key($i, $wt, p, bs);\n"
           ++ "      p += $encoder(r.$k[i], p, bs);       \n"
           ++ "    }                                      \n"
 
     fieldEncoders = Map.foldrWithKey (\k v -> T.append (fieldEncoder k v)) "" fields
 
   in
-    format tmpl 
+    format tmpl
       [ ("name",          name)
       , ("fieldEncoders", strip fieldEncoders)
       ]
@@ -116,16 +112,16 @@ generateEstimator (Struct name fields) =
       ++ "  }                                                              \n"
 
     scalarSize :: Field -> Code
-    scalarSize (k, ft) = 
+    scalarSize (k, ft) =
       let ctx = [ ("k",   k)
                 , ("lib", fieldLibrary ft)
                 ]
       in flip format ctx . pack $ case ft of
         Prim t _        -> show (primSize t)
-        Ref t Repeated  -> "_pb_sz_lendelim(bytes(r.$k[i]).length)"
-        Ref t _         -> "_pb_sz_lendelim(bytes(r.$k).length)"
-        User t Repeated -> "_pb_sz_lendelim($lib._estimate(r.$k[i]))"
-        User t _        -> "_pb_sz_lendelim($lib._estimate(r.$k))"
+        Ref t Repeated  -> "_pb._sz_lendelim(bytes(r.$k[i]).length)"
+        Ref t _         -> "_pb._sz_lendelim(bytes(r.$k).length)"
+        User t Repeated -> "_pb._sz_lendelim($lib._estimate(r.$k[i]))"
+        User t _        -> "_pb._sz_lendelim($lib._estimate(r.$k))"
         Sol t _         -> show (soltypeSize t)
 
     fieldEstimator :: Int -> Field -> Code
@@ -140,7 +136,7 @@ generateEstimator (Struct name fields) =
         True -> pack
            $ "    for(i=0; i<r.$k.length; i++)    \n"
           ++ "      e += $keySize + $scalarSize;  \n"
- 
+
     keySize :: Int -> Int
     keySize i = if i < 16 then 1 else 2
 
@@ -155,74 +151,10 @@ generateEstimator (Struct name fields) =
     fieldEstimators = Map.foldrWithKey (\k -> T.append . fieldEstimator k) ""
 
   in
-    format tmpl 
+    format tmpl
       [ ("name",            name)
       , ("fieldEstimators", strip $ fieldEstimators fields)
       ]
-
-pbHelpers :: Code
-pbHelpers = pack
-   $ "  function _pb_sz_lendelim(uint i) internal constant returns (uint) { \n"
-  ++ "    return i + _pb_sz_varint(i);                                      \n"
-  ++ "  }                                                                   \n"
-  ++ "  function _pb_sz_key(uint i) internal constant returns (uint) {      \n"
-  ++ "    if(i < 16) return 1;                                              \n"
-  ++ "    else if(i < 2048) return 2;                                       \n"
-  ++ "    else if(i < 262144) return 3;                                     \n"
-  ++ "    else throw;                                                       \n"
-  ++ "  }                                                                   \n"
-  ++ "  function _pb_sz_varint(uint i) internal constant returns (uint) {   \n"
-  ++ "    if(i < 128) return 1;                                             \n"
-  ++ "    else if(i < 16384) return 2;                                      \n"
-  ++ "    else if(i < 2097152) return 3;                                    \n"
-  ++ "    else if(i < 268435456) return 4;                                  \n"
-  ++ "    else throw;                                                       \n"
-  ++ "  }                                                                   \n"
-  ++ "  function _pb_encode_key(uint i, WireType wt, uint p, bytes bs)      \n"
-  ++ "      internal constant returns (uint) {                              \n"
-  ++ "  }                                                                   \n"
-  ++ "  function _pb_encode_varint(uint i, uint p, bytes bs)                \n"
-  ++ "      internal constant returns (uint) {                              \n"
-  ++ "  }                                                                   \n"
-  ++ "  function _pb_encode_varints(int i, uint p, bytes bs)                \n"
-  ++ "      internal constant returns (uint) {                              \n"
-  ++ "  }                                                                   \n"
-  ++ "  function _pb_encode_bytes(bytes xs, uint p, bytes bs)               \n"
-  ++ "      internal constant returns (uint) {                              \n"
-  ++ "  }                                                                   \n"
-  ++ "  function _pb_encode_string(string xs, uint p, bytes bs)             \n"
-  ++ "      internal constant returns (uint) {                              \n"
-  ++ "  }                                                                   \n"
-  ++ "  function _pb_encode_uint32f(uint32 x, uint p, bytes bs)             \n"
-  ++ "      internal constant returns (uint) {                              \n"
-  ++ "  }                                                                   \n"
-  ++ "  function _pb_encode_uint64f(uint64 x, uint p, bytes bs)             \n"
-  ++ "      internal constant returns (uint) {                              \n"
-  ++ "  }                                                                   \n"
-  ++ "  function _pb_encode_int32f(int32 x, uint p, bytes bs)               \n"
-  ++ "      internal constant returns (uint) {                              \n"
-  ++ "  }                                                                   \n"
-  ++ "  function _pb_encode_int64f(int64 x, uint p, bytes bs)               \n"
-  ++ "      internal constant returns (uint) {                              \n"
-  ++ "  }                                                                   \n"
-
-soltypeEncoders :: Code
-soltypeEncoders = pack
-   $ "  function _pb_encode_sol_bytesN(uint n, bytes32 x, uint p, bytes bs)\n"
-  ++ "      internal constant returns (uint) {                             \n"
-  ++ "    p += _pb_encode_varint(22, p, bs);                               \n"
-  ++ "    p += _pb_encode_key(1, WireType.LengthDelim, p, bs);             \n"
-  ++ "    p += _pb_encode_varint(20, p, bs);                               \n"
-  ++ "    return n + 3;                                                    \n"
-  ++ "  }                                                                  \n"
-  ++ "  function _pb_encode_sol_address(address x, uint p, bytes bs)       \n"
-  ++ "      internal constant returns (uint) {                             \n"
-  ++ "      return _pb_encode_sol_bytesN(20, bytes32(x), p, bs);           \n"
-  ++ "  }                                                                  \n"
-  ++ "  function _pb_encode_sol_uint(uint x, uint p, bytes bs)             \n"
-  ++ "      internal constant returns (uint) {                             \n"
-  ++ "      return _pb_encode_sol_bytesN(32, bytes32(x), p, bs);           \n"
-  ++ "  }                                                                  \n"
 
 soltypeSize :: Name -> Int
 soltypeSize x = 3 + case x of -- 3b shell [outerLen, key, innerLen]
