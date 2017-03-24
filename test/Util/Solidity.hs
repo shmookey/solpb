@@ -2,28 +2,34 @@
 
 module Util.Solidity where
 
+import Prelude hiding (fail)
 import Data.ByteString.Char8 (ByteString)
-import qualified Data.ByteString.Char8 as B
 import Data.Text (Text, pack, unpack)
+import qualified Data.ByteString.Char8 as B
+import qualified Data.Text as T
+
 import Crypto.Hash (Digest, Keccak_256, hash)
 import Shelly ((-|-))
-import qualified Data.Text as T
 import qualified Shelly as Sh
 
-type Code = Text
+import Control.Monad.Resultant
+import Types
 
-compile :: Text -> Code -> IO Text
+
+compile :: Text -> Code -> App Text
 compile name code = 
   let
     heading = T.concat ["======= ", name, " ======="]
-  in Sh.shelly . Sh.silently $ do
+  in lift . Sh.shelly . Sh.silently $ do
     out <- (return code) -|- Sh.run "solc" ["--bin-runtime"]
     return . (!! 2) . T.lines . snd $ T.breakOn heading out
 
-run :: Text -> Text -> IO Text
-run code input =
-  Sh.shelly $ do
-    Sh.run "evm" ["--code", code, "--input", input, "run"]
+run :: Text -> Text -> App Text
+run code input = do
+  result <- lift . Sh.shelly $ Sh.run "evm" ["--code", code, "--input", input, "run"]
+  if T.isInfixOf "error" result
+  then fail . show $ T.append "Error running EVM: " result
+  else return result
 
 callDataWithBytes :: Text -> Text -> Text
 callDataWithBytes name bs =

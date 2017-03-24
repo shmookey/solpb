@@ -55,6 +55,8 @@ create src@(DescriptorProto {field}) =
       case (type', type_name) of
         (Just FT.TYPE_UINT32, _) -> return $ Prim (pack "uint32") label
         (Just FT.TYPE_UINT64, _) -> return $ Prim (pack "uint64") label
+        (Just FT.TYPE_INT32, _)  -> return $ Prim (pack "int32") label
+        (Just FT.TYPE_INT64, _)  -> return $ Prim (pack "int64") label
         (Just FT.TYPE_STRING, _) -> return $ Ref (pack "string") label
         (Just FT.TYPE_BYTES, _)  -> return $ Ref (pack "bytes") label
         (Just x, _)              -> fail $ "unsupported field type: " ++ (show x)

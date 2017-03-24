@@ -1,0 +1,5 @@
+message Simple {
+  required uint32 a = 1;
+  required uint64 b = 2;
+}
+

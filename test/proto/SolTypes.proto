@@ -1,5 +1,7 @@
 // Test schema for native solidity types
 
+import "solidity.proto";
+
 message SolTypes {
   required solidity.address a = 1; 
   required solidity.uint u = 2;

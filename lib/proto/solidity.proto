@@ -1,3 +1,5 @@
+// Structures for representing Solidity's native primitive types
+
 message solidity {
   message address { required bytes data = 1; }
   message uint    { required bytes data = 1; }
