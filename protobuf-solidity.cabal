@@ -13,6 +13,25 @@ build-type:          Simple
 cabal-version:       >=1.10
 extra-source-files:  README.md
 
+library
+  hs-source-dirs:      src
+  default-language:    Haskell2010
+  exposed-modules:     Util
+  build-depends:       base >= 4.7 && < 5
+                     , bytestring
+                     , containers
+                     , directory
+                     , extra
+                     , filepath
+                     , hprotoc
+                     , optparse-applicative
+                     , protocol-buffers
+                     , protocol-buffers-descriptor
+                     , split
+                     , template
+                     , template-haskell
+                     , text
+
 executable solpb
   hs-source-dirs:      src
   main-is:             Main.hs
@@ -31,3 +50,15 @@ executable solpb
                      , template
                      , template-haskell
                      , text
+
+test-suite solpb-test
+  type:                exitcode-stdio-1.0
+  hs-source-dirs:      test
+  main-is:             Spec.hs
+  default-language:    Haskell2010
+  build-depends:       base >= 4.7 && < 5
+                     , bytestring
+                     , cryptonite
+                     , shelly
+                     , text
+                     , protobuf-solidity

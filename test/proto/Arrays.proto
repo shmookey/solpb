@@ -1,0 +1,6 @@
+// Test schema for arrays of protobuf primitives
+message Arrays {
+  repeated uint32 primArray = 1; // Tests arrays of Solidity primitives
+  repeated string refArray = 2;  // Tests arrays of Solidity dynamic-length reference types
+}
+

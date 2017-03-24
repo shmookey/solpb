@@ -1,0 +1,35 @@
+// Test schema for nested data structures
+
+message Structs {
+
+  // A shell message type with no fields, just providing a namespace
+  message Inner1 {
+
+    // A simple message type within another namespace
+    message Inner1_1 {
+      required uint32 x = 1;
+      required uint32 y = 2;
+    }
+
+    // A messsage type containing variable-length data
+    message Inner1_2 {
+      required string x = 1;
+    }
+  }
+
+  // A message type containing arrays of structures from a sibling namespace.
+  message Inner2 {
+    repeated Inner1.Inner1_1 uints = 1;
+    repeated Inner1.Inner1_2 strings = 2;
+  }
+
+  // And then our top level structure contains arrays of the other structures
+  repeated Inner2 internal = 1;
+  repeated Outer external = 2;
+}
+
+// An "externally-defined" message type
+message Outer {
+  required uint32 z = 1;
+}
+

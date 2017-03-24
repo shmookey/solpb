@@ -1,0 +1,51 @@
+// Test schema for native solidity types
+
+message SolTypes {
+  required solidity.address a = 1; 
+  required solidity.uint u = 2;
+  required solidity.uint8 u8 = 3;
+  required solidity.uint16 u16 = 4;
+  required solidity.uint32 u32 = 5;
+  required solidity.uint64 u64 = 6;
+  required solidity.uint128 u128 = 7;
+  required solidity.uint256 u256 = 8;
+  required solidity.int8 i8 = 9;
+  required solidity.int16 i16 = 10;
+  required solidity.int32 i32 = 11;
+  required solidity.int64 i64 = 12;
+  required solidity.int128 i128 = 13;
+  required solidity.int256 i256 = 14;
+  required solidity.bytes1 b1 = 15;
+  required solidity.bytes2 b2 = 16;
+  required solidity.bytes3 b3 = 17;
+  required solidity.bytes4 b4 = 18;
+  required solidity.bytes5 b5 = 19;
+  required solidity.bytes6 b6 = 20;
+  required solidity.bytes7 b7 = 21;
+  required solidity.bytes8 b8 = 22;
+  required solidity.bytes9 b9 = 23;
+  required solidity.bytes10 b10 = 24;
+  required solidity.bytes11 b11 = 25;
+  required solidity.bytes12 b12 = 26;
+  required solidity.bytes13 b13 = 27;
+  required solidity.bytes14 b14 = 28;
+  required solidity.bytes15 b15 = 29;
+  required solidity.bytes16 b16 = 30;
+  required solidity.bytes17 b17 = 31;
+  required solidity.bytes18 b18 = 32;
+  required solidity.bytes19 b19 = 33;
+  required solidity.bytes20 b20 = 34;
+  required solidity.bytes21 b21 = 35;
+  required solidity.bytes22 b22 = 36;
+  required solidity.bytes23 b23 = 37;
+  required solidity.bytes24 b24 = 38;
+  required solidity.bytes25 b25 = 39;
+  required solidity.bytes26 b26 = 40;
+  required solidity.bytes27 b27 = 41;
+  required solidity.bytes28 b28 = 42;
+  required solidity.bytes29 b29 = 43;
+  required solidity.bytes30 b30 = 44;
+  required solidity.bytes31 b31 = 45;
+  required solidity.bytes32 b32 = 46;
+}
+
