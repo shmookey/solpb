@@ -16,6 +16,7 @@ import qualified Spec.Proto.SimpleSpec as SimpleSpec
 
 runTests :: App ()
 runTests = do
+  safeIO $ putStrLn "\nStarting tests..."
   SimpleSpec.test
 
 main :: IO ()

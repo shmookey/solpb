@@ -16,6 +16,11 @@ import Control.Monad.Resultant
 import Types
 
 
+silent = safeIO 
+       . Sh.shelly 
+       . Sh.silently
+       . Sh.errExit False 
+
 compile :: Text -> Code -> App Text
 compile name code = 
   let
@@ -33,18 +38,18 @@ compile name code =
     heading = T.concat ["======= <stdin>:", name, " ======="]
 
   in recoverWith onFailure $ do
-    (retVal, output) <- lift . Sh.shelly . Sh.errExit False . Sh.silently
-      $ do output <- (return code) -|- Sh.run "solc" ["--bin-runtime"]
-           retVal <- Sh.lastExitCode
-           err    <- Sh.lastStderr
-           return (retVal, T.append output err)
-    case retVal of
-      0 -> return . (!! 2) . T.lines . snd $ T.breakOn heading output
-      _ -> fail $ unpack output
+    (ret, out) <- silent
+      $ do out <- (return code) -|- Sh.run "solc" ["--bin-runtime"]
+           ret <- Sh.lastExitCode
+           err <- Sh.lastStderr
+           return (ret, T.append out err)
+    case ret of
+      0 -> return . (!! 2) . T.lines . snd $ T.breakOn heading out
+      _ -> fail $ unpack out
 
 run :: Text -> Text -> App Text
 run code input = do
-  result <- lift . Sh.shelly $ Sh.run "evm" ["--code", code, "--input", input, "run"]
+  result <- silent $ Sh.run "evm" ["--code", code, "--input", input, "run"]
   if T.isInfixOf "error" result
   then fail . show $ T.append "Error running EVM: " result
   else return result
