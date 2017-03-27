@@ -2,7 +2,7 @@ pragma solidity ^0.4.0;
 
 library _pb {
 
-    enum WireType { Varint, Fixed64, LengthDelim, Fixed32 }
+    enum WireType { Varint, Fixed64, LengthDelim, StartGroup, EndGroup, Fixed32 }
 
     // Decoders
 
