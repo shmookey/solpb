@@ -55,20 +55,20 @@ generateInnerEncoder (Struct name fields) =
 
     wireType :: FieldType -> Code
     wireType ft = T.append "_pb.WireType." $ case ft of
-      Prim "uint32" _ -> "Fixed32"
-      Prim "int32" _  -> "Fixed32"
-      Prim "uint64" _ -> "Fixed64"
-      Prim "int64" _  -> "Fixed64"
+      Prim "uint32" _ -> "Varint"
+      Prim "int32" _  -> "Varint"
+      Prim "uint64" _ -> "Varint"
+      Prim "int64" _  -> "Varint"
       Ref _ _         -> "LengthDelim"
       User _ _        -> "LengthDelim"
       Sol _ _         -> "LengthDelim"
 
     encoderName :: FieldType -> Code
     encoderName ft = case ft of
-      Prim "uint32" _ -> "_pb._encode_uint32f"
-      Prim "int32" _  -> "_pb._encode_int32f"
-      Prim "uint64" _ -> "_pb._encode_uint64f"
-      Prim "int64" _  -> "_pb._encode_int64f"
+      Prim "uint32" _ -> "_pb._encode_varint"
+      Prim "int32" _  -> "_pb._encode_varint"
+      Prim "uint64" _ -> "_pb._encode_varint"
+      Prim "int64" _  -> "_pb._encode_varint"
       Ref x _         -> T.append "_pb._encode_" x
       User x _        -> T.append (libraryName x) "._encode"
       Sol x _         -> T.append "_pb._encode_sol_" x
