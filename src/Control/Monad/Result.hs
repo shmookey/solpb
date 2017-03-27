@@ -2,6 +2,8 @@ module Control.Monad.Result
   ( Result(Ok, Err)
   , mapError
   , get
+  , swapResult
+  , toResult
   ) where
 
 
@@ -36,10 +38,15 @@ mapError :: (e1 -> e2) -> Result e1 a -> Result e2 a
 mapError _ (Ok x)  = Ok x
 mapError f (Err e) = Err $ f e
 
+toResult :: Either a b -> Result a b
+toResult (Right x) = Ok x
+toResult (Left e)  = Err e
+
 -- | Unsafely attempt to retrieve the value from a successful Result
 get :: Show e => Result e a -> a
 get (Ok x)  = x
 get (Err e) = error (show e)
 
-
-
+swapResult :: Result e a -> Result a e
+swapResult (Ok x) = Err x
+swapResult (Err e) = Ok e

@@ -1,5 +1,8 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE PartialTypeSignatures #-}
+{-# LANGUAGE KindSignatures #-}
 
 module Control.Monad.Resultant
   ( Resultant
@@ -14,13 +17,15 @@ module Control.Monad.Resultant
   , setState
   , withState
   , updateState
+  , Rise(..)
+  , safeIO
   ) where
 
 import Prelude hiding (fail)
 import Data.Functor.Identity (Identity(runIdentity))
-import Control.Exception (SomeException, try)
+import Control.Exception (Exception, SomeException, try)
 
-import Control.Monad.Result (Result(Ok, Err), mapError)
+import Control.Monad.Result (Result(Ok, Err), mapError, swapResult, toResult)
 
 
 -- Resultant
@@ -62,11 +67,11 @@ class Monad m => ResultantMonad m e where
     Ok x  -> return x
     Err e -> f e
 
+
 instance ResultantMonad (Result e) e where
   point   = id 
   reflect = return
   fail s  = Err s
-
 
 -- ResultantT
 -- ---------------------------------------------------------------------
@@ -95,6 +100,60 @@ instance Monad m => ResultantMonad (ResultantT m st e) e where
   reflect m = ResultantT $ \st -> do
     (st', r) <- runResultantT m st
     return (st', return r)
+
+class Exceptional e where
+  convertException :: SomeException -> e
+
+instance Exceptional [Char] where
+  convertException = show
+
+--class Risen m where
+--  rise :: m a -> 
+
+class (Monad (r i s e), Monad i, Exceptional e) => Rise (r :: (* -> *) -> * -> * -> * -> *) i s e where
+  rRun :: r i s e a -> s -> i (s, Result e a)
+  rCon :: (s -> i (s, Result e a)) -> r i s e a
+
+  rPoint :: Result e a -> r i s e a
+  rPoint x = rCon $ \s -> return (s, x)
+
+  rLift :: i a -> r i s e a
+  rLift m = rCon $ \s -> fmap ((,) s . return) m
+
+  rJoin :: i (r i s e a) -> r i s e a
+  rJoin m = rCon $ \s -> (m >>= flip rRun s)
+
+  rResult :: r i s e a -> r i s e (Result e a)
+  rResult m = rCon $ \s -> 
+    do (s', r) <- rRun m s
+       return (s', return r)
+
+  rMap :: (a -> b) -> r i s e a -> r i s e b
+  rMap f x = fmap f x
+
+  rMapE :: Rise r i s e' => (e -> e') -> r i s e a -> r i s e' a
+  rMapE f m = rCon $ \s -> 
+    do (s', r) <- rRun m s
+       return (s', mapError f r)
+
+  rFail :: e -> r i s e a
+  rFail = rPoint . Err
+
+  rEither :: Either e a -> r i s e a
+  rEither lr = case lr of
+    Left l  -> rFail l
+    Right r -> return r
+
+
+safeIO :: Rise r IO s e => IO a -> r IO s e a
+safeIO m = 
+  let r = (toResult <$> try m) :: IO (Result SomeException _)
+  in rJoin $ fmap (rPoint . mapError convertException) r
+
+instance (Monad i, Exceptional e) => Rise ResultantT i s e where
+  rRun = runResultantT
+  rCon = ResultantT
+
 
 -- Utility functions
 -- ---------------------------------------------------------------------
