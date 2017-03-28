@@ -275,11 +275,15 @@ library _pb {
   }
 
   function _sz_varint(uint i) internal constant returns (uint) {
-    if(i < 128) return 1;
-    else if(i < 16384) return 2;
-    else if(i < 2097152) return 3;
-    else if(i < 268435456) return 4;
-    else throw;
+    uint count = 1;
+    assembly {
+      loop:
+        jumpi(end, lt(i, exp(2, mul(7, count))))
+        count := add(count, 1)
+        jump(loop)
+      end:
+    }
+    return count;
   }
 
   // Soltype extensions
