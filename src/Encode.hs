@@ -72,7 +72,7 @@ generateInnerEncoder (Struct name fields) =
       Prim "uint64" _ -> "_pb._encode_varint"
       Prim "int64" _  -> "_pb._encode_varint"
       Ref x _         -> T.append "_pb._encode_" x
-      User x _        -> T.append (libraryName x) "._encode"
+      User x _        -> T.append (libraryName x) "._encode_nested"
       Sol x _         -> T.append "_pb._encode_sol_" x
 
     fieldEncoder :: Int -> Field -> Code
