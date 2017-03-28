@@ -19,11 +19,13 @@ generate struct@(Struct name _) =
       ++ "                                     \n"
       ++ "  $mainEncoder                       \n"
       ++ "  $innerEncoder                      \n"
+      ++ "  $nestedEncoder                     \n"
       ++ "  $estimator                         \n"
   in
     format tmpl
       [ ("mainEncoder",     strip $ generateMainEncoder name)
       , ("innerEncoder",    strip $ generateInnerEncoder struct)
+      , ("nestedEncoder",   strip $ generateNestedEncoder struct)
       , ("estimator",       strip $ generateEstimator struct)
       ]
 
@@ -99,6 +101,22 @@ generateInnerEncoder (Struct name fields) =
       , ("fieldEncoders", strip fieldEncoders)
       ]
 
+-- An encoder that begins by writing its own length
+generateNestedEncoder :: Struct -> Code
+generateNestedEncoder (Struct name fields) =
+  let
+    tmpl = pack
+       $ "  function _encode_nested($name r, uint p, bytes bs)           \n"
+      ++ "      internal constant returns (uint) {                       \n"
+      ++ "    uint offset = p;                                           \n"
+      ++ "    p += _pb._encode_varint(_estimate(r), p, bs);              \n"
+      ++ "    p += _encode(r, p, bs);                                    \n"
+      ++ "    return p - offset;                                         \n"
+      ++ "  }                                                            \n"
+  in
+    format tmpl [ ("name", name) ]
+
+
 -- | Construct the size estimator function
 generateEstimator :: Struct -> Code
 generateEstimator (Struct name fields) =
@@ -117,7 +135,7 @@ generateEstimator (Struct name fields) =
                 , ("lib", fieldLibrary ft)
                 ]
       in flip format ctx . pack $ case ft of
-        Prim t _        -> show (primSize t)
+        Prim t _        -> "_pb._sz_varint(r.$k)"
         Ref t Repeated  -> "_pb._sz_lendelim(bytes(r.$k[i]).length)"
         Ref t _         -> "_pb._sz_lendelim(bytes(r.$k).length)"
         User t Repeated -> "_pb._sz_lendelim($lib._estimate(r.$k[i]))"
@@ -139,13 +157,6 @@ generateEstimator (Struct name fields) =
 
     keySize :: Int -> Int
     keySize i = if i < 16 then 1 else 2
-
-    primSize :: Name -> Int
-    primSize x = case unpack x of
-      "uint32" -> 4
-      "uint64" -> 8
-      "int32"  -> 4
-      "int64"  -> 8
 
     fieldEstimators :: Map Int Field -> Code
     fieldEstimators = Map.foldrWithKey (\k -> T.append . fieldEstimator k) ""
