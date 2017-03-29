@@ -8,6 +8,7 @@ import Data.List (intercalate)
 import Data.List.Split (splitOn)
 import Data.Map (Map)
 import Data.Text (pack, unpack)
+import Data.Semigroup ((<>))
 import qualified Data.Map as Map
 
 import Text.DescriptorProtos.FileDescriptorProto
@@ -42,33 +43,43 @@ collect (FileDescriptorProto {message_type}) =
 create :: DescriptorProto -> App Struct
 create src@(DescriptorProto {field}) =
   let
-    fieldProps :: FieldDescriptorProto -> App (Int, (Name, FieldType))
-    fieldProps src = do
-      num  <- fromIntegral <$> fromMaybe "missing field number" (FDP.number src)
-      name <- toName       <$> fromMaybe "missing field name"   (FDP.name src)
-      lbl  <- convertLabel <$> fromMaybe "missing field label"  (FDP.label src)
-      ft   <- getFieldType src lbl
-      return (num, (name, ft))
- 
-    getFieldType :: FieldDescriptorProto -> Label -> App FieldType
-    getFieldType (FieldDescriptorProto {type', type_name}) label =
-      case (type', type_name) of
-        (Just FT.TYPE_UINT32, _) -> return $ Prim (pack "uint32") label
-        (Just FT.TYPE_UINT64, _) -> return $ Prim (pack "uint64") label
-        (Just FT.TYPE_INT32, _)  -> return $ Prim (pack "int32") label
-        (Just FT.TYPE_INT64, _)  -> return $ Prim (pack "int64") label
-        (Just FT.TYPE_STRING, _) -> return $ Ref (pack "string") label
-        (Just FT.TYPE_BYTES, _)  -> return $ Ref (pack "bytes") label
-        (Just x, _)              -> fail $ "unsupported field type: " ++ (show x)
-        (Nothing, Just x)        -> readCustomType (toName x) label
-        _                        -> fail "missing field type"
 
-    readCustomType :: Name -> Label -> App FieldType
-    readCustomType typName lbl = case (splitOn "." $ unpack typName) of
-      []              -> fail "missing field type name"
-      (x:[])          -> return $ User (pack x) lbl
-      ("solidity":xs) -> return $ Sol (pack $ intercalate "." xs) lbl
-      _               -> fail "user-defined nested types not yet supported"
+    getField :: FieldDescriptorProto -> App Field
+    getField x = do
+      num  <- fromIntegral <$> fromMaybe "missing field number" (FDP.number x)
+      name <- toName       <$> fromMaybe "missing field name"   (FDP.name   x)
+      lbl  <- convertLabel <$> fromMaybe "missing field label"  (FDP.label  x)
+      vt   <- getValueType x
+      return $ Field num name vt lbl 
+ 
+    getValueType :: FieldDescriptorProto -> App ValueType
+    getValueType (FieldDescriptorProto {type', type_name}) =
+      case (type', type_name) of
+        (Just FT.TYPE_UINT32,   _) -> return $ VarintType   UInt32 
+        (Just FT.TYPE_UINT64,   _) -> return $ VarintType   UInt64
+        (Just FT.TYPE_INT32,    _) -> return $ VarintType   Int32
+        (Just FT.TYPE_INT64,    _) -> return $ VarintType   Int64
+        (Just FT.TYPE_SINT32,   _) -> return $ VarintType   SInt32
+        (Just FT.TYPE_SINT64,   _) -> return $ VarintType   SInt64 
+        (Just FT.TYPE_BOOL,     _) -> return $ VarintType   Bool  
+        (Just FT.TYPE_FIXED32,  _) -> return $ Fixed32Type  Fixed32
+        (Just FT.TYPE_SFIXED32, _) -> return $ Fixed32Type  SFixed32
+        (Just FT.TYPE_FIXED64,  _) -> return $ Fixed64Type  Fixed64
+        (Just FT.TYPE_SFIXED64, _) -> return $ Fixed64Type  SFixed64
+        (Just FT.TYPE_STRING,   _) -> return $ LenDelim     String
+        (Just FT.TYPE_BYTES,    _) -> return $ LenDelim     Bytes   
+        (Nothing, Just x)          -> return $ LenDelim     (messageType $ uToString x)
+        (Just x, _)                -> fail $ "unsupported field type: " ++ (show x)
+        _                          -> fail "missing field type"
+
+    messageType :: String -> LenDelimType
+    messageType name = 
+      let
+        x = pack name
+      in 
+        case splitOn "." name of
+          ("solidity" : _) -> Message . Sol . pack $ drop 9 name
+          _                -> Message . User x . mappend x $ pack "Codec"
 
     convertLabel :: FL.Label -> Label
     convertLabel x = case x of
@@ -81,6 +92,6 @@ create src@(DescriptorProto {field}) =
 
   in do 
     name   <- toName <$> fromMaybe "missing message type name" (DP.name src)
-    fields <- Map.fromList <$> mapM fieldProps (toList field)
+    fields <- mapM getField (toList field)
     return $ Struct name fields
 

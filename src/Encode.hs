@@ -4,6 +4,7 @@ module Encode where
 
 import Data.Text (pack, unpack, strip)
 import Data.Map (Map)
+import Data.Semigroup ((<>))
 import qualified Data.Text as T
 import qualified Data.Map as Map
 
@@ -12,7 +13,7 @@ import Util
 
 
 generate :: Struct -> Code
-generate struct@(Struct name _) =
+generate struct =
   let
     tmpl = pack
        $ "  // Encoder section                 \n"
@@ -23,90 +24,79 @@ generate struct@(Struct name _) =
       ++ "  $estimator                         \n"
   in
     format tmpl
-      [ ("mainEncoder",     strip $ generateMainEncoder name)
-      , ("innerEncoder",    strip $ generateInnerEncoder struct)
+      [ ("mainEncoder",     strip $ generateMainEncoder   struct)
+      , ("innerEncoder",    strip $ generateInnerEncoder  struct)
       , ("nestedEncoder",   strip $ generateNestedEncoder struct)
-      , ("estimator",       strip $ generateEstimator struct)
+      , ("estimator",       strip $ generateEstimator     struct)
       ]
 
-generateMainEncoder :: Name -> Code
-generateMainEncoder name =
+generateMainEncoder :: Struct -> Code
+generateMainEncoder struct =
   let
     tmpl = pack
-       $ "  function encode($name r) internal constant returns (bytes) { \n"
-      ++ "    bytes memory bs = new bytes(_estimate(r));                 \n"
-      ++ "    uint sz = _encode(r, 32, bs);                              \n"
-      ++ "    assembly { mstore(bs, sz) }                                \n"
-      ++ "    return bs;                                                 \n"
-      ++ "  }                                                            \n"
+       $ "  function encode($struct r) internal constant returns (bytes) { \n"
+      ++ "    bytes memory bs = new bytes(_estimate(r));                   \n"
+      ++ "    uint sz = _encode(r, 32, bs);                                \n"
+      ++ "    assembly { mstore(bs, sz) }                                  \n"
+      ++ "    return bs;                                                   \n"
+      ++ "  }                                                              \n"
   in
-    format tmpl [("name", name)]
+    format tmpl [("struct", structName struct)]
 
 -- | Construct the encode function
 generateInnerEncoder :: Struct -> Code
-generateInnerEncoder (Struct name fields) =
+generateInnerEncoder struct =
   let
     tmpl = pack
-       $ "  function _encode($name r, uint p, bytes bs)                  \n"
-      ++ "      internal constant returns (uint) {                       \n"
-      ++ "    uint offset = p;                                           \n"
-      ++ "    uint i;                                                    \n"
-      ++ "    $fieldEncoders                                             \n"
-      ++ "    return p - offset;                                         \n"
-      ++ "  }                                                            \n"
+       $ "  function _encode($struct r, uint p, bytes bs)        \n"
+      ++ "      internal constant returns (uint) {               \n"
+      ++ "    uint offset = p;                                   \n"
+      ++ "    uint i;                                            \n"
+      ++ "    $encoders                                          \n"
+      ++ "    return p - offset;                                 \n"
+      ++ "  }                                                    \n"
 
-    wireType :: FieldType -> Code
-    wireType ft = T.append "_pb.WireType." $ case ft of
-      Prim "uint32" _ -> "Varint"
-      Prim "int32" _  -> "Varint"
-      Prim "uint64" _ -> "Varint"
-      Prim "int64" _  -> "Varint"
-      Ref _ _         -> "LengthDelim"
-      User _ _        -> "LengthDelim"
-      Sol _ _         -> "LengthDelim"
+    encoderName :: ValueType -> Code
+    encoderName typ = case typ of
+      LenDelim (Message (User _ lib)) -> lib <> "._encode_nested"
+      _                               -> "_pb._encode_" <> formatEncoding typ
 
-    encoderName :: FieldType -> Code
-    encoderName ft = case ft of
-      Prim "uint32" _ -> "_pb._encode_varint"
-      Prim "int32" _  -> "_pb._encode_varint"
-      Prim "uint64" _ -> "_pb._encode_varint"
-      Prim "int64" _  -> "_pb._encode_varint"
-      Ref x _         -> T.append "_pb._encode_" x
-      User x _        -> T.append (libraryName x) "._encode_nested"
-      Sol x _         -> T.append "_pb._encode_sol_" x
-
-    fieldEncoder :: Int -> Field -> Code
-    fieldEncoder i (k, ft) =
+    fieldEncoder :: Field -> Code
+    fieldEncoder fld =
       let
-        ctx = [ ("k",       k)
-              , ("i",       pack $ show i)
-              , ("wt",      wireType ft)
-              , ("encoder", encoderName ft)
-              ]
-      in flip format ctx $ case isRepeated ft of
-        False -> pack
-           $ "    p += _pb._encode_key($i, $wt, p, bs);  \n"
-          ++ "    p += $encoder(r.$k, p, bs);            \n"
-        True -> pack
-           $ "    for(i=0; i<r.$k.length; i++) {         \n"
-          ++ "      p += _pb._encode_key($i, $wt, p, bs);\n"
-          ++ "      p += $encoder(r.$k[i], p, bs);       \n"
-          ++ "    }                                      \n"
+        tmpl = pack $
+          if
+            isRepeated fld
+          then
+               "    for(i=0; i<r.$field.length; i++) {                \n"
+            ++ "      p += _pb._encode_key($key, $wiretype, p, bs);   \n"
+            ++ "      p += $encoder(r.$field[i], p, bs);              \n"
+            ++ "    }                                                 \n"
+          else
+               "    p += _pb._encode_key($key, $wiretype, p, bs);     \n"
+            ++ "    p += $encoder(r.$key, p, bs);                     \n"
+      in
+        format tmpl
+          [ ("field",    fieldName fld)
+          , ("key",      show' $ fieldID fld)
+          , ("wiretype", formatWireType $ fieldType fld)
+          , ("encoder",  encoderName $ fieldType fld)
+          ]
 
-    fieldEncoders = Map.foldrWithKey (\k v -> T.append (fieldEncoder k v)) "" fields
+    encoders = mconcat . map fieldEncoder $ structFields struct
 
   in
     format tmpl
-      [ ("name",          name)
-      , ("fieldEncoders", strip fieldEncoders)
+      [ ("struct",   structName struct)
+      , ("encoders", strip encoders)
       ]
 
 -- An encoder that begins by writing its own length
 generateNestedEncoder :: Struct -> Code
-generateNestedEncoder (Struct name fields) =
+generateNestedEncoder struct =
   let
     tmpl = pack
-       $ "  function _encode_nested($name r, uint p, bytes bs)           \n"
+       $ "  function _encode_nested($struct r, uint p, bytes bs)         \n"
       ++ "      internal constant returns (uint) {                       \n"
       ++ "    uint offset = p;                                           \n"
       ++ "    p += _pb._encode_varint(_estimate(r), p, bs);              \n"
@@ -114,57 +104,68 @@ generateNestedEncoder (Struct name fields) =
       ++ "    return p - offset;                                         \n"
       ++ "  }                                                            \n"
   in
-    format tmpl [ ("name", name) ]
+    format tmpl [("struct", structName struct)]
 
 
 -- | Construct the size estimator function
 generateEstimator :: Struct -> Code
-generateEstimator (Struct name fields) =
+generateEstimator struct =
   let
     tmpl = pack
-       $ "  function _estimate($name r) internal constant returns (uint) { \n"
-      ++ "    uint e;                                                      \n"
-      ++ "    uint i;                                                      \n"
-      ++ "    $fieldEstimators                                             \n"
-      ++ "    return e;                                                    \n"
-      ++ "  }                                                              \n"
+       $ "  function _estimate($struct r) internal constant returns (uint) { \n"
+      ++ "    uint e;                                                        \n"
+      ++ "    uint i;                                                        \n"
+      ++ "    $estimators                                                    \n"
+      ++ "    return e;                                                      \n"
+      ++ "  }                                                                \n"
 
     scalarSize :: Field -> Code
-    scalarSize (k, ft) =
-      let ctx = [ ("k",   k)
-                , ("lib", fieldLibrary ft)
-                ]
-      in flip format ctx . pack $ case ft of
-        Prim t _        -> "_pb._sz_varint(r.$k)"
-        Ref t Repeated  -> "_pb._sz_lendelim(bytes(r.$k[i]).length)"
-        Ref t _         -> "_pb._sz_lendelim(bytes(r.$k).length)"
-        User t Repeated -> "_pb._sz_lendelim($lib._estimate(r.$k[i]))"
-        User t _        -> "_pb._sz_lendelim($lib._estimate(r.$k))"
-        Sol t _         -> show (soltypeSize t)
+    scalarSize fld =
+      let
+        tmpl = pack $ case fieldType fld of
+          VarintType _    -> "_pb._sz_$valtype(r.$field)"
+          Fixed64Type _   -> "8"
+          Fixed32Type _   -> "4"
+          LenDelim ld     -> case ld of
+            Bytes              -> "_pb._sz_lendelim(r.$field.length)"
+            String             -> "_pb._sz_lendelim(bytes(r.$field).length)"
+            Packed             -> error "internal error: packed fields not supported"
+            Message (User _ _) -> "_pb._sz_lendelim($lib._estimate(r.$field))"
+            Message (Sol t)    -> show $ soltypeSize t
+          StartGroup      -> error "internal error: groups not supported"
+          EndGroup        -> error "internal error: groups not supported"
 
-    fieldEstimator :: Int -> Field -> Code
-    fieldEstimator i (k, ft) =
-      let ctx = [ ("k",          k)
-                , ("scalarSize", scalarSize (k, ft))
-                , ("keySize",    pack . show $ keySize i)
-                ]
-      in flip format ctx $ case isRepeated ft of
-        False -> pack
-           $ "    e += $keySize + $scalarSize;    \n"
-        True -> pack
-           $ "    for(i=0; i<r.$k.length; i++)    \n"
-          ++ "      e += $keySize + $scalarSize;  \n"
+        suffix = if isRepeated fld then "[i]" else ""
+      in
+        format tmpl
+          [ ("field",   fieldName fld <> pack suffix)
+          , ("lib",     formatLibrary $ fieldType fld)
+          , ("valtype", formatEncoding $ fieldType fld)
+          ]
 
-    keySize :: Int -> Int
-    keySize i = if i < 16 then 1 else 2
+    fieldEstimator :: Field -> Code
+    fieldEstimator fld =
+      let
+        tmpl = pack $
+          if
+            isRepeated fld
+          then
+            "    for(i=0; i<r.$field.length; i++) e+= $szKey + $szItem; "
+          else
+             "    e += $keySize + $scalarSize; "
+      in
+        format tmpl
+          [ ("field",  fieldName fld)
+          , ("szKey",  if fieldID fld < 16 then "1" else "2")
+          , ("szItem", scalarSize fld)
+          ]
 
-    fieldEstimators :: Map Int Field -> Code
-    fieldEstimators = Map.foldrWithKey (\k -> T.append . fieldEstimator k) ""
+    estimators = T.unlines . map fieldEstimator $ structFields struct
 
   in
     format tmpl
-      [ ("name",            name)
-      , ("fieldEstimators", strip $ fieldEstimators fields)
+      [ ("struct",     structName struct)
+      , ("estimators", strip $ estimators)
       ]
 
 soltypeSize :: Name -> Int

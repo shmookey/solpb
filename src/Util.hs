@@ -20,3 +20,6 @@ format tmpl = toStrict . Template.substitute tmpl . context
 stripLineEndings :: Text -> Text
 stripLineEndings = T.unlines . map T.stripEnd . T.lines
 
+show' :: Show a => a -> Text
+show' = pack . show
+

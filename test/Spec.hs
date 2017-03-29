@@ -11,13 +11,17 @@ import Util.Solidity
 import Util.TestGen
 import Util.Protobuf
 
+import Gen.Prim.Prim
+
 import qualified Spec.Proto.SimpleSpec as SimpleSpec
+import qualified Spec.Proto.PrimSpec as PrimSpec
 
 
 runTests :: App ()
 runTests = do
   safeIO $ putStrLn "\nStarting tests..."
   SimpleSpec.test
+  PrimSpec.test
 
 main :: IO ()
 main = do

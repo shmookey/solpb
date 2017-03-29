@@ -5,6 +5,7 @@ module Generator where
 
 import Data.Map (Map)
 import Data.Text (pack, strip)
+import Data.Semigroup ((<>))
 import qualified Data.Text as T
 import qualified Data.Map as Map
 
@@ -67,38 +68,41 @@ generateFrontend name structs =
       ++ "}                             \n"
 
     makeDelegators :: Struct -> Code
-    makeDelegators (Struct name fields) = 
+    makeDelegators struct = 
       let
         tmpl = pack
-           $ "  function decode$name(bytes bs) internal constant returns($name) {\n"
-          ++ "    $name memory r;                                                \n"
-          ++ "    var x = $lib.decode(bs);                                       \n"
-          ++ "    assembly { r := x }                                            \n"
-          ++ "    return r;                                                      \n"
-          ++ "  }                                                                \n"
-          ++ "  function encode$name($name x) internal constant returns(bytes) { \n"
-          ++ "    $lib.$name memory xx;                                          \n"
-          ++ "    assembly { xx := x }                                           \n"
-          ++ "    return $lib.encode(xx);                                        \n"
-          ++ "  }                                                                \n"
-          ++ "  function store$name($name memory input, $name storage output)    \n"
-          ++ "      internal constant {                                          \n"
-          ++ "    $lib.$name memory input2;                                      \n"
-          ++ "    $lib.$name storage output2;                                    \n"
-          ++ "    assembly {                                                     \n"
-          ++ "      input2 := input                                              \n"
-          ++ "      output2 := output                                            \n"
-          ++ "    }                                                              \n"
-          ++ "    return $lib.store(input2, output2);                            \n"
-          ++ "  }                                                                \n"
+           $ "  function decode$struct(bytes bs) internal constant returns($struct) { \n"
+          ++ "    $struct memory r;                                                   \n"
+          ++ "    var x = $lib.decode(bs);                                            \n"
+          ++ "    assembly { r := x }                                                 \n"
+          ++ "    return r;                                                           \n"
+          ++ "  }                                                                     \n"
+          ++ "  function encode$struct($struct x) internal constant returns(bytes) {  \n"
+          ++ "    $lib.$struct memory xx;                                             \n"
+          ++ "    assembly { xx := x }                                                \n"
+          ++ "    return $lib.encode(xx);                                             \n"
+          ++ "  }                                                                     \n"
+          ++ "  function store$struct($struct memory input, $struct storage output)   \n"
+          ++ "      internal constant {                                               \n"
+          ++ "    $lib.$struct memory input2;                                         \n"
+          ++ "    $lib.$struct storage output2;                                       \n"
+          ++ "    assembly {                                                          \n"
+          ++ "      input2 := input                                                   \n"
+          ++ "      output2 := output                                                 \n"
+          ++ "    }                                                                   \n"
+          ++ "    return $lib.store(input2, output2);                                 \n"
+          ++ "  }                                                                     \n"
       in
-        format tmpl [("name", name), ("lib", libraryName name)]
+        format tmpl
+          [ ("name", structName struct)
+          , ("lib",  structName struct <> "Codec")
+          ]
     
     structDefs = T.concat $ map (Library.structDefinition False) structs
   in
     format tmpl
       [ ("name",       name)
       , ("structDefs", strip structDefs)
-      , ("delegators", strip . T.concat $ map makeDelegators structs)
+      , ("delegators", strip . mconcat $ map makeDelegators structs)
       ]
 

@@ -20,10 +20,10 @@ generate :: Struct -> App Code
 generate struct = return $ createLibrary struct
 
 createLibrary :: Struct -> Code
-createLibrary struct@(Struct name fields) =
+createLibrary struct =
   let
     tmpl = pack
-       $  "library $name {               \n"
+       $  "library ${struct}Codec {      \n"
       ++  "  $structDefinition           \n"
       ++  "  $decoderSection             \n"
       ++  "  $encoderSection             \n"
@@ -36,16 +36,16 @@ createLibrary struct@(Struct name fields) =
 
   in    
     format tmpl
-      [ ("name",             libraryName name)
+      [ ("struct",           structName struct)
       , ("structDefinition", strip $ structDefinition True struct)
       , ("decoderSection",   strip $ decoderSection)
       , ("encoderSection",   strip $ encoderSection)
-      , ("utilityFunctions", strip $ utilityFunctions name)
+      , ("utilityFunctions", strip $ utilityFunctions struct)
       , ("storeFunction",    strip $ storeFunction struct)
       ]
 
 structDefinition :: Bool -> Struct -> Code
-structDefinition qualifiedNames (Struct name kvs) =
+structDefinition qualifiedNames struct =
   let
     tmpl = pack
        $ "  struct $name {    \n"
@@ -53,78 +53,69 @@ structDefinition qualifiedNames (Struct name kvs) =
      ++  "  }                 \n"
 
     formatField :: Field -> Code
-    formatField (x, ft) = format "    $type $name; \n" $
-      if qualifiedNames then [("name", x), ("type", fieldType ft)]
-                        else [("name", x), ("type", fieldTypeName ft)]
+    formatField fld = 
+      let
+        tmpl = pack "    $type $name; "
+      in
+        format tmpl
+          [ ("name", fieldName fld)
+          , ("type", formatFieldType Normal fld)
+          ]
 
-    fields = Map.foldl (\a -> T.append a . formatField) "" kvs
+    fields = T.unlines . map formatField $ structFields struct
   in
     format tmpl
-      [ ("name",   name)
+      [ ("name",   structName struct)
       , ("fields", strip fields)
       ]
 
-utilityFunctions :: Name -> Code
-utilityFunctions name =
+utilityFunctions :: Struct -> Code
+utilityFunctions struct =
   let
     tmpl = pack
-       $ "  enum WireType { Varint, Fixed64, LengthDelim, Fixed32 }      \n"
-      ++ "  function nil() internal constant returns ($name r) {         \n"
+       $ "  function nil() internal constant returns ($name r) {         \n"
       ++ "    assembly { r := 0 }                                        \n"
       ++ "  }                                                            \n"
       ++ "  function isNil($name x) internal constant returns (bool r) { \n"
       ++ "    assembly { r := iszero(x) }                                \n"
       ++ "  }                                                            \n"
   in
-    format tmpl [("name", name)]
+    format tmpl [("name", structName struct)]
 
 storeFunction :: Struct -> Code
-storeFunction (Struct name kvs) =
+storeFunction struct =
   let
     tmpl = pack
        $ "  function store($x memory input, $x storage output) internal { \n"
-      ++ "    $builtins                                                   \n"
-      ++ "    $structScalars                                              \n"
-      ++ "    $structArrays                                               \n"
+      ++ "    $fieldStores                                                \n"
       ++ "  }                                                             \n"
 
-    builtin :: Name -> Code
-    builtin x  = format "    output.$x = input.$x; \n" [("x",x)]
-
-    structScalar :: Name -> Name -> Code
-    structScalar lib x = format "    $lib.store(input.$x, output.$x); \n"
-      [("lib", lib), ("x", x)]
-
-    structArray :: Name -> Name -> Code
-    structArray lib x =
+    storeField :: Field -> Code
+    storeField fld =
       let
-        tmpl = pack
-           $ "    output.$x.length = input.$x.length;         \n"
-          ++ "    for(uint $i=0; $i<input.$x.length; $i++)    \n"
-          ++ "      $lib.store(input.$x[$i], output.$x[$i]);  \n"
-        index = T.append x "_index"
+        tmpl = pack $
+          if
+            isStruct fld && isRepeated fld
+          then
+               "    output.$field.length = input.$field.length;          \n"
+            ++ "    for(uint i$i=0; i$i<input.$field.length; i$i++)      \n"
+            ++ "      $lib.store(input.$field[i$i], output.$field[i$i]); \n"
+          else if
+            isStruct fld
+          then
+              "    $lib.store(input.$field, output.$field);              \n"
+          else
+              "    output.$field = input.$field;                         \n" 
       in
-        format tmpl [("lib",lib),("x",x),("i",index)]
+        format tmpl
+          [ ("field", fieldName fld)
+          , ("lib",   formatLibrary $ fieldType fld)
+          , ("i",     show' $ fieldID fld)
+          ]
 
-    builtins = T.concat
-     . map (builtin . fst) 
-     . Map.elems
-     $ Map.filter (not . isStruct . snd) kvs
-
-    structScalars = T.concat
-       . map (\(x,ft) -> structScalar (fieldLibrary ft) x)
-       . Map.elems
-       $ Map.filter (\(_,ft) -> isStruct ft && not (isRepeated ft)) kvs
-    
-    structArrays = T.concat
-       . map (\(x,ft) -> structArray (fieldLibrary ft) x)
-       . Map.elems
-       $ Map.filter (\(_,ft) -> isStruct ft && isRepeated ft) kvs
   in
     format tmpl
-      [ ("x",             name)
-      , ("builtins",      strip builtins)
-      , ("structScalars", strip structScalars)
-      , ("structArrays",  strip structArrays)
+      [ ("x",            structName struct)
+      , ("fieldStores",  strip . mconcat . map storeField $ structFields struct)
       ]
 

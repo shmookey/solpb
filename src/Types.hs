@@ -4,6 +4,7 @@ module Types where
 
 import Data.Map (Map)
 import Data.Text (Text)
+import Data.Semigroup ((<>))
 import qualified Data.Map as Map
 import qualified Data.Text as T
 
@@ -14,14 +15,12 @@ type App = ResultantT IO () String
 
 type Name  = Text
 type Code  = Text
-type Field = (Name, FieldType)
-
-data FieldType
-  = Prim Name Label
-  | Ref  Name Label
-  | User Name Label
-  | Sol  Name Label
-  deriving (Show)
+data Field = Field
+  { fieldID    :: Int
+  , fieldName  :: Name
+  , fieldType  :: ValueType
+  , fieldLabel :: Label
+  } deriving (Show)
 
 data Label
   = Optional 
@@ -31,7 +30,7 @@ data Label
 
 data Struct = Struct
   { structName   :: Name
-  , structFields :: Map Int Field
+  , structFields :: [Field]
   }
 
 data Options = Options
@@ -41,80 +40,142 @@ data Options = Options
   , optInputs :: [FilePath]
   } deriving (Show)
 
+data ValueType
+  = VarintType   VarintType
+  | Fixed64Type  Fixed64Type
+  | LenDelim LenDelimType
+  | Fixed32Type  Fixed32Type
+  | StartGroup
+  | EndGroup
+  deriving (Eq, Show)
 
--- | Qualify struct name with its containing library
-qualifiedType :: Name -> Name
-qualifiedType x = T.concat [libraryName x, ".", x]
+data VarintType
+  = Int32  | Int64  | UInt32 | UInt64
+  | SInt32 | SInt64 | Bool   | Enum 
+  deriving (Eq, Show) 
 
--- | Library name for a given struct
-libraryName :: Name -> Name
-libraryName x = T.append x "Codec"
+data Fixed64Type
+  = Fixed64 | SFixed64 | Double
+  deriving (Eq, Show) 
 
--- | Scalar type to use for function locals
-localScalar :: FieldType -> Name
-localScalar ft = case ft of
-  Prim x _ -> x
-  Ref  x _ -> T.append x " memory"
-  User x _ -> T.append (qualifiedType x) " memory"
-  Sol  x _ -> x
+data LenDelimType
+  = String | Bytes | Message Message | Packed
+  deriving (Eq, Show) 
 
--- | Type of a field, e.g. "uint32[]" or "FooCodec.Bar"
-fieldType :: FieldType -> Name
-fieldType ft = 
-  let suffix = if isRepeated ft then "[]" else ""
-      typ    = fieldTypeName ft
-  in flip T.append suffix $ case isStruct ft of
-    True -> qualifiedType typ
-    False -> typ
+data Fixed32Type
+  = Fixed32 | SFixed32 | Float
+  deriving (Eq, Show) 
 
-fieldLabel :: FieldType -> Label
-fieldLabel ft = case ft of
-  Prim _ x -> x
-  Ref  _ x -> x
-  User _ x -> x
-  Sol  _ x -> x
+data Message
+  = User Name Name -- Basic type name, library name
+  | Sol Name       -- Native type name
+  deriving (Eq, Show)
 
-fieldTypeName :: FieldType -> Name
-fieldTypeName ft = case ft of
-  Prim x _ -> x
-  Ref  x _ -> x
-  User x _ -> x
-  Sol  x _ -> x
+data TypeContext
+  = Scalar | Normal | Quote
+  deriving (Eq, Show)
 
-fieldLibrary :: FieldType -> Name
-fieldLibrary ft = case ft of
-  Prim x _ -> ""
-  Ref  x _ -> ""
-  User x _ -> libraryName x
-  Sol  x _ -> ""
+formatValueType :: TypeContext -> ValueType -> Name
+formatValueType ctx typ =
+  let
+    formatMessageType :: Message -> Name
+    formatMessageType msg = case (msg, ctx) of
+      (User name lib, Quote) -> lib <> "_" <> name
+      (User name lib, _)     -> lib <> "." <> name
+      (Sol name, _)          -> name
 
-isRepeated :: FieldType -> Bool
-isRepeated ft = case fieldLabel ft of
+  in case typ of
+    VarintType x -> case x of
+      Int32  -> "int32"
+      Int64  -> "int64"
+      UInt32 -> "uint32"
+      UInt64 -> "uint64"
+      SInt32 -> "int32"
+      SInt64 -> "int64"
+      Bool   -> "bool"
+      Enum   -> error "internal error: enums not yet supported"
+  
+    Fixed64Type x -> case x of
+      Fixed64  -> "int64"
+      SFixed64 -> "int64"
+      Double   -> error "internal error: floating point numbers not supported"
+  
+    LenDelim x -> case x of
+      String    -> "string"
+      Bytes     -> "bytes"
+      Message m -> formatMessageType m
+      Packed    -> error "internal error: packed encodings not yet supported"
+  
+    Fixed32Type x -> case x of
+      Fixed32  -> "uint32"
+      SFixed32 -> "int32"
+      Float    -> error "internal error: floating point numbers not supported"
+  
+    StartGroup -> error "internal error: groups not supported"
+    EndGroup   -> error "internal error: groups not supported"
+
+formatFieldType :: TypeContext -> Field -> Name
+formatFieldType ctx fld =
+  let
+    base = formatValueType ctx $ fieldType fld
+  in
+    case (ctx, isRepeated fld) of
+      (Normal, True) -> base <> "[]"
+      _              -> base
+
+formatEncoding :: ValueType -> Name
+formatEncoding typ = case typ of
+  VarintType x -> case x of
+    Int32  -> "int32"
+    Int64  -> "int64"
+    UInt32 -> "uint32"
+    UInt64 -> "uint64"
+    SInt32 -> "sint32"
+    SInt64 -> "sint64"
+    Bool   -> "bool"
+    Enum   -> error "internal error: enums not yet supported"
+
+  Fixed64Type x -> case x of
+    Fixed64  -> "fixed64"
+    SFixed64 -> "sfixed64"
+    Double   -> error "internal error: floating point numbers not supported"
+
+  LenDelim x -> case x of
+    Message (Sol x)    -> "sol_" <> x
+    Message (User x _) -> x
+    String -> "string"
+    Bytes  -> "bytes"
+    Packed -> error "internal error: packed encodings not yet supported"
+
+  Fixed32Type x -> case x of
+    Fixed32  -> "fixed32"
+    SFixed32 -> "sfixed32"
+    Float    -> error "internal error: floating point numbers not supported"
+
+  StartGroup -> error "internal error: groups not supported"
+  EndGroup   -> error "internal error: groups not supported"
+
+formatWireType :: ValueType -> Name
+formatWireType typ = case typ of
+  VarintType _   -> "_pb._WireType.Varint"
+  Fixed64Type _  -> "_pb._WireType.Fixed64"
+  LenDelim _     -> "_pb._WireType.LengthDelim"
+  Fixed32Type _  -> "_pb._WireType.Fixed32"
+  StartGroup     -> error "internal error: groups not supported"
+  EndGroup       -> error "internal error: groups not supported"
+
+formatLibrary :: ValueType -> Name
+formatLibrary typ = case typ of
+  LenDelim (Message (User _ x)) -> x
+  _                             -> ""
+
+isRepeated :: Field -> Bool
+isRepeated fld = case fieldLabel fld of
   Repeated -> True
   _        -> False
 
-isStruct :: FieldType -> Bool
-isStruct ft = case ft of
-  User _ _ -> True
-  _        -> False
+isStruct :: Field -> Bool
+isStruct fld = case fieldType fld of
+  LenDelim (Message (User _ _)) -> True
+  _                             -> False
 
-
--- Monad access helpers
-
---addField :: Int -> Name -> FieldType -> Generator ()
---addField i k ft = updateFields $ Map.insert i (k, ft)
---
----- Basic monad access operations
---
---getName :: Generator Name
---getName = stName <$> getState
---
---getFields :: Generator (Map Int (Name, FieldType))
---getFields = stFields <$> getState
---
---setFields :: Map Int (Name, FieldType) -> Generator ()
---setFields x = updateState $ \st -> st { stFields = x }
---
---updateFields :: (Map Int (Name, FieldType) -> Map Int (Name, FieldType)) -> Generator ()
---updateFields f = getFields >>= setFields . f
---
