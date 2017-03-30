@@ -74,6 +74,5 @@ test = spec "Decode a message containing all primitive types" $
     then fail . unpack $ "Encoding error. Expected " <> encoded <> " but got " <> result
     else return ()
 
-
     return ()
 

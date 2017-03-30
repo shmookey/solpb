@@ -44,13 +44,13 @@ create :: DescriptorProto -> App Struct
 create src@(DescriptorProto {field}) =
   let
 
-    getField :: FieldDescriptorProto -> App Field
-    getField x = do
+    getField :: Int -> FieldDescriptorProto -> App Field
+    getField i x = do
       num  <- fromIntegral <$> fromMaybe "missing field number" (FDP.number x)
       name <- toName       <$> fromMaybe "missing field name"   (FDP.name   x)
       lbl  <- convertLabel <$> fromMaybe "missing field label"  (FDP.label  x)
       vt   <- getValueType x
-      return $ Field num name vt lbl 
+      return $ Field num i name vt lbl 
  
     getValueType :: FieldDescriptorProto -> App ValueType
     getValueType (FieldDescriptorProto {type', type_name}) =
@@ -92,6 +92,6 @@ create src@(DescriptorProto {field}) =
 
   in do 
     name   <- toName <$> fromMaybe "missing message type name" (DP.name src)
-    fields <- mapM getField (toList field)
+    fields <- mapM (uncurry getField) (zip [0..] $ toList field)
     return $ Struct name fields
 

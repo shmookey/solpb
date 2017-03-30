@@ -16,7 +16,8 @@ type App = ResultantT IO () String
 type Name  = Text
 type Code  = Text
 data Field = Field
-  { fieldID    :: Int
+  { fieldID    :: Int -- the protobuf field number, may skip values
+  , fieldIndex :: Int -- consecutive index of the fields
   , fieldName  :: Name
   , fieldType  :: ValueType
   , fieldLabel :: Label

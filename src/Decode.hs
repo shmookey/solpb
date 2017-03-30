@@ -117,7 +117,7 @@ generateInnerDecoder struct =
        format tmpl
          [ ("field", fieldName fld)
          , ("typ",   formatFieldType Normal fld)
-         , ("i",     show' $ fieldID fld - 1)
+         , ("i",     show' $ fieldIndex fld)
          ]
 
     -- | `handlers True` generates field handlers for the first pass
@@ -194,7 +194,7 @@ generateFieldReader struct fld =
       then
         format "[ r.$field.length - counters[$i] ]" 
           [ ("field", fieldName fld)
-          , ("i"    , show' $ fieldID fld - 1)
+          , ("i"    , show' $ fieldIndex fld)
           ]
       else
         ""
@@ -202,7 +202,7 @@ generateFieldReader struct fld =
   in
     format tmpl   
       [ ("field",   fieldName fld)
-      , ("i",       show' $ fieldID fld - 1)
+      , ("i",       show' $ fieldIndex fld)
       , ("n",       show' . length $ structFields struct)
       , ("typ",     structName struct)
       , ("decoder", decoderName fld)
