@@ -25,6 +25,8 @@ before_install:
   | tar xz --wildcards --strip-components=1 -C ~/.local/bin '*/stack' ; fi
 - curl https://s3-ap-southeast-2.amazonaws.com/protobuf-solidity/build-deps/$TRAVIS_OS_NAME/evm -o ~/.local/bin/evm
 - curl https://s3-ap-southeast-2.amazonaws.com/protobuf-solidity/build-deps/$TRAVIS_OS_NAME/solc -o ~/.local/bin/solc
+- chmod +x ~/.local/bin/solc
+- chmod +x ~/.local/bin/evm
 install:
 - stack --no-terminal --install-ghc test --only-dependencies
 script:
