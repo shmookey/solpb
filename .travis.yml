@@ -18,15 +18,24 @@ addons:
 before_install:
 - mkdir -p ~/.local/bin
 - export PATH=$HOME/.local/bin:$PATH
-- if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then travis_retry curl --insecure -L https://www.stackage.org/stack/osx-x86_64
-  | tar xz --strip-components=1 --include '*/stack' -C ~/.local/bin ; fi
-- if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then gem install --no-ri --no-rdoc fpm ; fi
-- if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then travis_retry curl -L https://www.stackage.org/stack/linux-x86_64
-  | tar xz --wildcards --strip-components=1 -C ~/.local/bin '*/stack' ; fi
 - curl https://s3-ap-southeast-2.amazonaws.com/protobuf-solidity/build-deps/$TRAVIS_OS_NAME/evm -o ~/.local/bin/evm
-- curl https://s3-ap-southeast-2.amazonaws.com/protobuf-solidity/build-deps/$TRAVIS_OS_NAME/solc -o ~/.local/bin/solc
-- chmod +x ~/.local/bin/solc
 - chmod +x ~/.local/bin/evm
+-   if [[ "$TRAVIS_OS_NAME" == "osx" ]]
+  | then
+  |   travis_retry curl --insecure -L https://www.stackage.org/stack/osx-x86_64
+  |   tar xz --strip-components=1 --include '*/stack' -C ~/.local/bin
+  |   brew tap ethereum/ethereum
+  |   brew install solidity
+  |   brew linkapps solidity
+  | fi
+-   if [[ "$TRAVIS_OS_NAME" == "linux" ]] 
+  | then
+  |   gem install --no-ri --no-rdoc fpm
+  |   travis_retry curl -L https://www.stackage.org/stack/linux-x86_64
+  |   tar xz --wildcards --strip-components=1 -C ~/.local/bin '*/stack'
+  |   curl https://s3-ap-southeast-2.amazonaws.com/protobuf-solidity/build-deps/$TRAVIS_OS_NAME/solc -o ~/.local/bin/solc
+  |   chmod +x ~/.local/bin/solc
+  | fi
 install:
 - stack --no-terminal --install-ghc test --only-dependencies
 script:
