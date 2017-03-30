@@ -21,8 +21,8 @@ import Gen.Prim (fileDescriptorProto)
 import Gen.Prim.Prim
 
 
-test :: Spec ()
-test = spec "Decode a message containing all primitive types" $
+tests :: Spec ()
+tests = spec "PrimSpec" 2 $
   let
     msg :: Prim
     msg = Prim 
@@ -63,16 +63,17 @@ test = spec "Decode a message containing all primitive types" $
     (struct, structs) <- getStruct fileDescriptorProto "Prim"
     libSrc            <- solpb $ Generator.generate structs
     testContractSrc   <- generateTestContract struct checks
-    
     let code = testContractSrc <> libSrc
-
     contract      <- compile "PrimSpec" code
-    decodeOutput  <- runEVM contract $ callDataWithBytes "testDecode" encoded
-    encodeOutput  <- runEVM contract $ callDataNoArgs "testEncode"
-    let result     = extractReturnedBytes encodeOutput
-    if result /= encoded
-    then fail . unpack $ "Encoding error. Expected " <> encoded <> " but got " <> result
-    else return ()
 
-    return ()
+    test "Decode a message containing all protobuf primitive types" $ do
+      runEVM contract $ callDataWithBytes "testDecode" encoded
+      return ()
+
+    test "Encode a message containing all protobuf primitive types" $ do
+      encodeOutput <- runEVM contract $ callDataNoArgs "testEncode"
+      let result = extractReturnedBytes encodeOutput
+      if result /= encoded
+      then fail . unpack $ "Encoding error. Expected " <> encoded <> " but got " <> result
+      else return ()
 

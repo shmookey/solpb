@@ -16,12 +16,14 @@ import Gen.Prim.Prim
 import Util.ReSpec
 import qualified Spec.Proto.SimpleSpec as SimpleSpec
 import qualified Spec.Proto.PrimSpec as PrimSpec
+import qualified Spec.Proto.ArraysSpec as ArraysSpec
 
 
 tests :: Spec ()
 tests = testSuite "solpb" $ do
-  SimpleSpec.test
-  PrimSpec.test
+  SimpleSpec.tests
+  PrimSpec.tests
+  ArraysSpec.tests
   
 main :: IO ()
 main = testMain tests

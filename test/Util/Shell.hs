@@ -40,7 +40,7 @@ safeShell cmd args input =
  
     dump :: Text -> Spec Text
     dump txt = do
-      dumpfile <- (\n -> cmd <> "-" <> show' n <> ".testdump") <$> getTotal
+      dumpfile <- (\n -> cmd <> "-" <> show' n <> ".testdump") <$> getCount
       safeIO $ writeFile (unpack dumpfile) (unpack txt)
       return dumpfile
 

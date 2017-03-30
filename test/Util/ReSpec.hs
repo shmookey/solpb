@@ -13,12 +13,16 @@ import Control.Monad.Resultant
 type Spec = ResultantT IO State String
 
 data State = State
-  { stFailed :: Int
-  , stTotal  :: Int
+  { stFailed      :: Int
+  , stSkipped     :: Int
+  , stPassed      :: Int
+  , stCount       :: Int
+  , stSpecName    :: String
+  , stExpecting   :: Int
   }
 
 initState :: State
-initState = State 0 0
+initState = State 0 0 0 0 "(global)" 0
 
 testMain :: Spec () -> IO ()
 testMain m = do
@@ -27,8 +31,35 @@ testMain m = do
     Ok _ -> return ()
     Err e -> putStrLn e >> exitFailure
 
-spec :: String -> Spec () -> Spec ()
-spec desc action = 
+spec :: String -> Int -> Spec () -> Spec ()
+spec desc num action = 
+  let
+    onFail :: String -> Spec ()
+    onFail err = do
+      exp <- getExpecting
+      safeIO . putStrLn $ "An error occured in the setup for spec " ++ desc ++ "."
+      safeIO . putStrLn $ "The remaining " ++ (show exp) ++ " tests in this spec will be skipped."
+      updateSkipped (+exp)
+  in do
+    setSpecName desc
+    setExpecting num
+    recoverWith onFail action
+    exp <- getExpecting
+    if exp > 0
+    then do
+      safeIO . putStr $ "Warning: fewer than expected tests were run for spec " ++ desc
+      safeIO . putStrLn $ " (expected " ++ (show num) ++ ", got " ++ show (num - exp) ++ ")"
+    else if exp < 0
+    then do
+      safeIO . putStr $ "Warning: more than expected tests were run for spec " ++ desc
+      safeIO . putStrLn $ " (expected " ++ (show num) ++ ", got " ++ show (num - exp) ++ ")"
+    else 
+      return ()
+    setExpecting 0
+    
+
+test :: String -> Spec () -> Spec ()
+test desc action = 
   let
     onFail :: String -> Spec ()
     onFail err = do
@@ -37,50 +68,59 @@ spec desc action =
       updateFailed (+1)
   in do
     n <- show <$> nextTest
-    safeIO . putStr $ concat ["#", n, " ", desc, ": "]
+    cur <- getSpecName
+    safeIO . putStr $ concat ["#", n, " [", cur, "] ", desc, ": "]
     recoverWith onFail $ do
       action
       safeIO $ putStrLn "PASS"
+      updatePassed (+1)
 
 testSuite :: String -> Spec () -> Spec ()
 testSuite name action = do
   safeIO $ putStrLn ""
   safeIO . putStrLn $ "Starting test suite: " ++ name
   action
-  n <- getTotal
+  p <- getPassed
   f <- getFailed
+  s <- getSkipped
+  c <- getCount
   safeIO . putStrLn $ concat
     ["Finished running tests. Results: "
-    , show (n-f), " passed, "
-    , show f    , " failed, "
-    , show n    , " total." ]
+    , show p , " passed, "
+    , show f , " failed, "
+    , show s , " skipped, "
+    , show c , " total." ]
 
-  when (f > 0) $ fail "The test suite failed to complete successfully."
+  when (p < c) $ fail "The test suite failed to complete successfully."
 
 nextTest :: Spec Int
-nextTest = updateTotal (+1) >> getTotal
-
-
+nextTest = do
+  updateCount (+1)
+  updateExpecting (\x -> x-1)
+  getCount
 
 
 -- Monad state
 -- ---------------------------------------------------------------------
 
-getTotal :: Spec Int
-getTotal = stTotal <$> getState
+getPassed     = stPassed <$> getState
+getFailed     = stFailed <$> getState
+getSkipped    = stSkipped <$> getState
+getCount      = stCount <$> getState
+getSpecName   = stSpecName <$> getState
+getExpecting  = stExpecting <$> getState
 
-getFailed :: Spec Int
-getFailed = stFailed <$> getState
+setPassed x  = updateState $ \st -> st { stPassed = x }
+setFailed x  = updateState $ \st -> st { stFailed = x }
+setSkipped x = updateState $ \st -> st { stSkipped = x }
+setCount x   = updateState $ \st -> st { stCount = x }
+setSpecName x = updateState $ \st -> st { stSpecName = x }
+setExpecting x = updateState $ \st -> st { stExpecting = x }
 
-setTotal :: Int -> Spec ()
-setTotal x = updateState $ \st -> st { stTotal = x }
 
-setFailed :: Int -> Spec ()
-setFailed x = updateState $ \st -> st { stFailed = x }
-
-updateFailed :: (Int -> Int) -> Spec ()
+updatePassed f = getPassed >>= setPassed . f
 updateFailed f = getFailed >>= setFailed . f
-
-updateTotal :: (Int -> Int) -> Spec ()
-updateTotal f = getTotal >>= setTotal . f
+updateSkipped f = getSkipped >>= setSkipped . f
+updateCount f = getCount >>= setCount . f
+updateExpecting f = getExpecting >>= setExpecting . f
 

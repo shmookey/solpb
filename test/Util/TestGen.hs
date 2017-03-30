@@ -26,6 +26,8 @@ data Value
   | Bool Bool
   | String String
   | Bytes ByteString 
+  | IntList String [Integer]
+  | BytesList [ByteString]
 
 generateTestContract :: Struct -> [(Name, Value)] -> Spec Code
 generateTestContract (Struct name fields) checks =
@@ -58,12 +60,29 @@ generateTestContract (Struct name fields) checks =
           byte i b = printf "    if(bytes(x.%s)[%i] != %i) throw;  \n" name i b
         in
           mconcat . map (uncurry byte) . zip [0..] $ map ord xs
-      Bytes bs   -> 
+      Bytes bs -> 
         let 
           byte :: Int -> Int -> String
           byte i b = printf "    if(x.%s[%i] != %i) throw;  \n" name i b
         in
           mconcat . map (uncurry byte) . zip [0..] . map ord $ BL8.unpack bs
+      IntList _ xs ->
+        let
+          elem :: Int -> Integer -> String
+          elem i v = printf "    if(x.%s[%i] != %i) throw;  \n" name i v
+        in
+          mconcat . map (uncurry elem) $ zip [0..] xs
+      BytesList bss -> 
+        let 
+          bytes :: Int -> ByteString -> String
+          bytes i bs =
+            let 
+              byte :: Int -> Int -> String
+              byte j b = printf "    if(x.%s[%i][%i] != %i) throw;  \n" name i j b
+            in
+              mconcat . map (uncurry byte) . zip [0..] . map ord $ BL8.unpack bs
+        in
+          mconcat . map (uncurry bytes) $ zip [0..] bss
 
     fieldSet :: Name -> Value -> Code
     fieldSet name value = pack $ case value of
@@ -80,7 +99,7 @@ generateTestContract (Struct name fields) checks =
           bytes = mconcat . map (uncurry byte) . zip [0..] $ map ord xs
         in
           mconcat [alloc, bytes, cast]
-      Bytes bs   -> 
+      Bytes bs -> 
         let
           byte :: Int -> Int -> String
           byte i b = printf "    x.%s[%i] = %i; \n" name i b
@@ -89,6 +108,31 @@ generateTestContract (Struct name fields) checks =
           bytes = mconcat . map (uncurry byte) . zip [0..] . map ord $ BL8.unpack bs
         in
           mconcat [alloc, bytes]
+      IntList typ xs ->
+        let
+          elem :: Int -> Integer -> String
+          elem i x = printf "    x.%s[%i] = %i; \n" name i x
+
+          alloc = printf "    x.%s = new %s[](%i); \n" name typ (length xs)
+          elems = mconcat . map (uncurry elem) $ zip [0..] xs
+        in
+          mconcat [alloc, elems]
+      BytesList bss -> 
+        let
+          bytes :: Int -> ByteString -> String
+          bytes i bs =
+            let
+              byte :: Int -> Int -> String
+              byte j b = printf "    x.%s[%i][%i] = %i; \n" name i j b
+
+              alloc = printf "    x.%s[%i] = new bytes(%i); \n" name i (BL8.length bs)
+              bytes = mconcat . map (uncurry byte) . zip [0..] . map ord $ BL8.unpack bs
+            in
+              mconcat [alloc, bytes]
+          alloc = printf "    x.%s = new bytes[](%i); \n" name (length bss)
+          elems = mconcat . map (uncurry bytes) $ zip [0..] bss
+        in
+          mconcat [alloc, elems]
  
   in return $ format tmpl
     [ ("name",         name)

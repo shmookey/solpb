@@ -18,8 +18,8 @@ import Gen.Simple (fileDescriptorProto)
 import Gen.Simple.Simple
 
 
-test :: Spec ()
-test = spec "Decode a simple message" $
+tests :: Spec ()
+tests = spec "SimpleSpec" 2 $
   let
     msg = Simple
       { a = 42
@@ -38,10 +38,15 @@ test = spec "Decode a simple message" $
     libSrc            <- solpb $ Generator.generate structs
     testContractSrc   <- generateTestContract struct checks
     contract          <- compile "SimpleSpec" $ testContractSrc <> libSrc
-    decodeOutput      <- runEVM contract $ callDataWithBytes "testDecode" encoded
-    encodeOutput      <- runEVM contract $ callDataNoArgs "testEncode"
-    let result         = extractReturnedBytes encodeOutput
-    if result /= encoded
-    then fail . unpack $ "Encoding error. Expected " <> encoded <> " but got " <> result
-    else return ()
+
+    test "Decode a simple message" $ do
+      runEVM contract $ callDataWithBytes "testDecode" encoded
+      return ()
+
+    test "Encode a simple message" $ do
+      encodeOutput <- runEVM contract $ callDataNoArgs "testEncode"
+      let result = extractReturnedBytes encodeOutput
+      if result /= encoded
+      then fail . unpack $ "Encoding error. Expected " <> encoded <> " but got " <> result
+      else return ()
 

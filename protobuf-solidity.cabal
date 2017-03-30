@@ -67,6 +67,7 @@ test-suite solpb-test
   build-depends:       base >= 4.7 && < 5
                      , base16-bytestring
                      , bytestring
+                     , containers
                      , cryptonite
                      , directory
                      , hprotoc
