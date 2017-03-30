@@ -207,8 +207,8 @@ library _pb {
   }
 
   function _encode_int32(int32 x, uint p, bytes bs) internal constant returns (uint) {
-    uint32 twosComplement; // use signextend here?
-    assembly { twosComplement := x }
+    uint64 twosComplement; // use signextend here?
+    assembly { twosComplement := signextend(64, x) }
     return _encode_varint(twosComplement, p, bs);
   }
 
@@ -257,12 +257,12 @@ library _pb {
 
   function _encode_uintf(uint x, uint p, bytes bs, uint sz) internal constant returns (uint) {
     assembly {
-      let bsptr := add(bs, p)
+      let bsptr := add(sz,add(bs, p))
       let count := sz
       loop:
         jumpi(end, eq(count, 0))
+        bsptr := sub(bsptr, 1)
         mstore8(bsptr, byte(sub(32, count), x))
-        bsptr := add(bsptr, 1)
         count := sub(count, 1)
         jump(loop)
       end:
@@ -271,16 +271,8 @@ library _pb {
   }
 
   function _encode_zigzag(int i) internal returns (uint) {
-    uint encodedInt;
-    int x = -1;
-    assembly {
-      let mask := 0
-      jumpi(next, sgt(i, 0))
-      mask := x
-      next:
-        encodedInt := xor(mul(i, 2), mask)
-    }
-    return encodedInt;
+    if(i >= 0) return uint(i) * 2;
+    else return uint(i * -2) - 1;
   }
 
   // Estimators

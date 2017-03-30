@@ -6,9 +6,9 @@ module Build where
 
 import Language.Haskell.TH
 
-
 pbLibrary :: Q Exp
 pbLibrary = runIO $ do
   xs <- readFile "lib/solidity/libsolpb.sol"
   return . LitE $ StringL xs
+
 

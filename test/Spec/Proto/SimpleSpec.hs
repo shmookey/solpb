@@ -26,17 +26,22 @@ test = spec "Decode a simple message" $
       , b = 16
       }
 
-    checks   = 
+    checks = 
       [ ("a", Integer . toInteger $ a msg)
       , ("b", Integer . toInteger $ b msg)
       ]
 
-    callData = callDataWithBytes "testDecode" $ hexEncode msg
+    encoded = hexEncode msg
+
   in do
     (struct, structs) <- getStruct fileDescriptorProto "Simple"
     libSrc            <- solpb $ Generator.generate structs
     testContractSrc   <- generateTestContract struct checks
-    testContract      <- compile "SimpleSpec" $ testContractSrc <> libSrc
-    output            <- runEVM testContract callData
-    return ()
+    contract          <- compile "SimpleSpec" $ testContractSrc <> libSrc
+    decodeOutput      <- runEVM contract $ callDataWithBytes "testDecode" encoded
+    encodeOutput      <- runEVM contract $ callDataNoArgs "testEncode"
+    let result         = extractReturnedBytes encodeOutput
+    if result /= encoded
+    then fail . unpack $ "Encoding error. Expected " <> encoded <> " but got " <> result
+    else return ()
 

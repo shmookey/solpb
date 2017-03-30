@@ -27,24 +27,6 @@ data Value
   | String String
   | Bytes ByteString 
 
-fieldCheck :: Name -> Value -> Code
-fieldCheck name value = pack $ case value of
-  Integer x  -> printf "    if(x.%s != %i) throw;    \n" name x
-  Bool False -> printf "    if(x.%s != false) throw; \n" name
-  Bool True  -> printf "    if(x.%s != true) throw;  \n" name
-  String xs  -> 
-    let 
-      byte :: Int -> Int -> String
-      byte i b = printf "    if(bytes(x.%s)[%i] != %i) throw;  \n" name i b
-    in
-      mconcat . map (uncurry byte) . zip [0..] $ map ord xs
-  Bytes bs   -> 
-    let 
-      byte :: Int -> Int -> String
-      byte i b = printf "    if(x.%s[%i] != %i) throw;  \n" name i b
-    in
-      mconcat . map (uncurry byte) . zip [0..] . map ord $ BL8.unpack bs
-
 generateTestContract :: Struct -> [(Name, Value)] -> Spec Code
 generateTestContract (Struct name fields) checks =
   let
@@ -64,13 +46,55 @@ generateTestContract (Struct name fields) checks =
       ++ "  }                                                \n"
       ++ "}                                                  \n"
 
-    fieldSetters = pack ""
+
+    fieldCheck :: Name -> Value -> Code
+    fieldCheck name value = pack $ case value of
+      Integer x  -> printf "    if(x.%s != %i) throw;    \n" name x
+      Bool False -> printf "    if(x.%s != false) throw; \n" name
+      Bool True  -> printf "    if(x.%s != true) throw;  \n" name
+      String xs  -> 
+        let 
+          byte :: Int -> Int -> String
+          byte i b = printf "    if(bytes(x.%s)[%i] != %i) throw;  \n" name i b
+        in
+          mconcat . map (uncurry byte) . zip [0..] $ map ord xs
+      Bytes bs   -> 
+        let 
+          byte :: Int -> Int -> String
+          byte i b = printf "    if(x.%s[%i] != %i) throw;  \n" name i b
+        in
+          mconcat . map (uncurry byte) . zip [0..] . map ord $ BL8.unpack bs
+
+    fieldSet :: Name -> Value -> Code
+    fieldSet name value = pack $ case value of
+      Integer x  -> printf "    x.%s = %i;    \n" name x
+      Bool False -> printf "    x.%s = false; \n" name
+      Bool True  -> printf "    x.%s = true;  \n" name
+      String xs  -> 
+        let 
+          byte :: Int -> Int -> String
+          byte i b = printf "    b_%s[%i] = %i; \n" name i b
+
+          alloc = printf "    bytes memory b_%s = new bytes(%i); \n" name (length xs)
+          cast  = printf "    x.%s = string(b_%s);               \n" name name
+          bytes = mconcat . map (uncurry byte) . zip [0..] $ map ord xs
+        in
+          mconcat [alloc, bytes, cast]
+      Bytes bs   -> 
+        let
+          byte :: Int -> Int -> String
+          byte i b = printf "    x.%s[%i] = %i; \n" name i b
+
+          alloc = printf "    x.%s = new bytes(%i); \n" name (BL8.length bs)
+          bytes = mconcat . map (uncurry byte) . zip [0..] . map ord $ BL8.unpack bs
+        in
+          mconcat [alloc, bytes]
  
   in return $ format tmpl
     [ ("name",         name)
     , ("lib",          name <> "Codec")
     , ("fieldChecks",  strip . mconcat $ map (uncurry fieldCheck) checks)
-    , ("fieldSetters", fieldSetters)
+    , ("fieldSetters", strip . mconcat $ map (uncurry fieldSet) checks)
     ]
 
 onFailure :: Code -> Code -> String -> String -> String -> Spec Text

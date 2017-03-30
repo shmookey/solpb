@@ -15,10 +15,11 @@ import qualified Generator
 import Util
 import Util.ReSpec
 import Util.Protobuf (hexEncode, getStruct, solpb)
-import Util.Solidity (compile, runEVM, callDataWithBytes)
+import Util.Solidity 
 import Util.TestGen
 import Gen.Prim (fileDescriptorProto)
 import Gen.Prim.Prim
+
 
 test :: Spec ()
 test = spec "Decode a message containing all primitive types" $
@@ -56,7 +57,8 @@ test = spec "Decode a message containing all primitive types" $
       , ("bs",  Bytes   $ bs msg)
       ]
 
-    callData = callDataWithBytes "testDecode" $ hexEncode msg
+    encoded = hexEncode msg
+
   in do
     (struct, structs) <- getStruct fileDescriptorProto "Prim"
     libSrc            <- solpb $ Generator.generate structs
@@ -64,8 +66,14 @@ test = spec "Decode a message containing all primitive types" $
     
     let code = testContractSrc <> libSrc
 
-    testContract      <- compile "PrimSpec" code
-    output            <- runEVM testContract callData
+    contract      <- compile "PrimSpec" code
+    decodeOutput  <- runEVM contract $ callDataWithBytes "testDecode" encoded
+    encodeOutput  <- runEVM contract $ callDataNoArgs "testEncode"
+    let result     = extractReturnedBytes encodeOutput
+    if result /= encoded
+    then fail . unpack $ "Encoding error. Expected " <> encoded <> " but got " <> result
+    else return ()
+
 
     return ()
 
