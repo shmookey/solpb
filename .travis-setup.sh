@@ -18,8 +18,9 @@ then
   gem install --no-ri --no-rdoc fpm
   curl -L https://www.stackage.org/stack/linux-x86_64
   tar xz --wildcards --strip-components=1 -C $HOME/.local/bin '*/stack'
-  curl $DEPS_URL/$TRAVIS_OS_NAME/solc -o $HOME/.local/bin/solc
-  chmod +x $HOME/.local/bin/solc
+  add-apt-repository ppa:ethereum/ethereum
+  apt-get update
+  apt-get install solc
 fi
 
 curl $DEPS_URL/$TRAVIS_OS_NAME/evm -o $HOME/.local/bin/evm
