@@ -2,7 +2,6 @@
 
 module Build where
 
-
 {- | Compile-time template to bake the protobuf runtime library into solpb -}
 
 import Language.Haskell.TH

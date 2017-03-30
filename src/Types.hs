@@ -96,7 +96,7 @@ formatValueType ctx typ =
       Enum   -> error "internal error: enums not yet supported"
   
     Fixed64Type x -> case x of
-      Fixed64  -> "int64"
+      Fixed64  -> "uint64"
       SFixed64 -> "int64"
       Double   -> error "internal error: floating point numbers not supported"
   
@@ -157,10 +157,10 @@ formatEncoding typ = case typ of
 
 formatWireType :: ValueType -> Name
 formatWireType typ = case typ of
-  VarintType _   -> "_pb._WireType.Varint"
-  Fixed64Type _  -> "_pb._WireType.Fixed64"
-  LenDelim _     -> "_pb._WireType.LengthDelim"
-  Fixed32Type _  -> "_pb._WireType.Fixed32"
+  VarintType _   -> "_pb.WireType.Varint"
+  Fixed64Type _  -> "_pb.WireType.Fixed64"
+  LenDelim _     -> "_pb.WireType.LengthDelim"
+  Fixed32Type _  -> "_pb.WireType.Fixed32"
   StartGroup     -> error "internal error: groups not supported"
   EndGroup       -> error "internal error: groups not supported"
 

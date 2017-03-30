@@ -4,33 +4,39 @@ module Spec.Proto.SimpleSpec where
 
 import Prelude hiding (fail)
 import Data.Text (Text, pack, unpack)
+import Data.Semigroup ((<>))
 import qualified Data.Text as T
 
 import Control.Monad.Resultant
-import Types
 import qualified Generator
 
-import Util.Protobuf (hexEncode, getStruct)
-import Util.Solidity (compile, run, callDataWithBytes)
-import Util.TestGen (generateTestContract, onFailure)
+import Util.ReSpec
+import Util.Protobuf (hexEncode, getStruct, solpb)
+import Util.Solidity
+import Util.TestGen 
 import Gen.Simple (fileDescriptorProto)
 import Gen.Simple.Simple
 
 
-test :: App ()
-test =
+test :: Spec ()
+test = spec "Decode a simple message" $
   let
-    msg      = Simple 42 16 
+    msg = Simple
+      { a = 42
+      , b = 16
+      }
+
+    checks   = 
+      [ ("a", Integer . toInteger $ a msg)
+      , ("b", Integer . toInteger $ b msg)
+      ]
+
     callData = callDataWithBytes "testDecode" $ hexEncode msg
-    checks   = [("a", "42"), ("b", "16")]
   in do
-    safeIO $ putStr "Decode a simple message: "
     (struct, structs) <- getStruct fileDescriptorProto "Simple"
-    libSrc            <- Generator.generate structs
+    libSrc            <- solpb $ Generator.generate structs
     testContractSrc   <- generateTestContract struct checks
-    testContract      <- compile "SimpleSpec" (T.append testContractSrc libSrc)
-    output            <- recoverWith (onFailure testContractSrc callData (show msg) "SimpleSpec") 
-                       $ run testContract callData
-    safeIO $ putStrLn "PASS"
+    testContract      <- compile "SimpleSpec" $ testContractSrc <> libSrc
+    output            <- runEVM testContract callData
     return ()
 

@@ -50,3 +50,4 @@ get (Err e) = error (show e)
 swapResult :: Result e a -> Result a e
 swapResult (Ok x) = Err x
 swapResult (Err e) = Ok e
+

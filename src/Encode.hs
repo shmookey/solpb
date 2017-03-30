@@ -74,7 +74,7 @@ generateInnerEncoder struct =
             ++ "    }                                                 \n"
           else
                "    p += _pb._encode_key($key, $wiretype, p, bs);     \n"
-            ++ "    p += $encoder(r.$key, p, bs);                     \n"
+            ++ "    p += $encoder(r.$field, p, bs);                   \n"
       in
         format tmpl
           [ ("field",    fieldName fld)
@@ -123,6 +123,7 @@ generateEstimator struct =
     scalarSize fld =
       let
         tmpl = pack $ case fieldType fld of
+          VarintType Bool -> "1"
           VarintType _    -> "_pb._sz_$valtype(r.$field)"
           Fixed64Type _   -> "8"
           Fixed32Type _   -> "4"
@@ -152,7 +153,7 @@ generateEstimator struct =
           then
             "    for(i=0; i<r.$field.length; i++) e+= $szKey + $szItem; "
           else
-             "    e += $keySize + $scalarSize; "
+             "    e += $szKey + $szItem; "
       in
         format tmpl
           [ ("field",  fieldName fld)

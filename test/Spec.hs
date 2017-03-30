@@ -13,20 +13,17 @@ import Util.Protobuf
 
 import Gen.Prim.Prim
 
+import Util.ReSpec
 import qualified Spec.Proto.SimpleSpec as SimpleSpec
 import qualified Spec.Proto.PrimSpec as PrimSpec
 
 
-runTests :: App ()
-runTests = do
-  safeIO $ putStrLn "\nStarting tests..."
+tests :: Spec ()
+tests = testSuite "solpb" $ do
   SimpleSpec.test
   PrimSpec.test
-
+  
 main :: IO ()
-main = do
-  (_, r) <- runResultantT runTests ()
-  case r of
-    Ok _ -> return ()
-    Err e -> putStrLn $ "Error: " ++ e
+main = testMain tests
+
 

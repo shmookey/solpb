@@ -5,7 +5,6 @@ module Main where
 import Control.Monad.Extra (unlessM)
 import Options.Applicative ((<>))
 import Data.Text (unpack)
-import System.Directory (createDirectory, doesDirectoryExist)
 import qualified Text.ProtocolBuffers.ProtoCompile.Parser as Parser
 import qualified Options.Applicative as Opts
 import qualified Data.ByteString.Lazy as B
@@ -16,6 +15,7 @@ import Control.Monad.Resultant
 import Convert
 import Generator
 import Types
+import Util (ensureDirectory)
 import qualified Build
 
 readCliOpts :: App Options
@@ -68,7 +68,7 @@ app = readCliOpts >>= \o ->
         lift $ writeFile target (unpack code)
 
   in do
-    lift $ unlessM (doesDirectoryExist outputDir) (createDirectory outputDir)
+    lift $ ensureDirectory outputDir
     mapM_ processFile inputFiles
 
 main :: IO ()

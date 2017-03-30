@@ -94,8 +94,8 @@ generateFrontend name structs =
           ++ "  }                                                                     \n"
       in
         format tmpl
-          [ ("name", structName struct)
-          , ("lib",  structName struct <> "Codec")
+          [ ("struct", structName struct)
+          , ("lib",    structName struct <> "Codec")
           ]
     
     structDefs = T.concat $ map (Library.structDefinition False) structs

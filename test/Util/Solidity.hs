@@ -5,61 +5,49 @@ module Util.Solidity where
 import Prelude hiding (fail)
 import Data.ByteString.Char8 (ByteString)
 import Data.Text (Text, pack, unpack)
+import System.Directory
+import Text.Printf (printf)
 import qualified Data.ByteString.Char8 as B
 import qualified Data.Text as T
 
 import Crypto.Hash (Digest, Keccak_256, hash)
-import Shelly ((-|-))
-import qualified Shelly as Sh
 
 import Control.Monad.Resultant
+import Util.Shell
+import Util.ReSpec
+import Util (ensureDirectory)
 import Types
 
 
-silent = safeIO 
-       . Sh.shelly 
-       . Sh.silently
-       . Sh.errExit False 
+tmpContractDir = "test/Gen/solidity"
+tmpBytecodeDir = "test/Gen/bytecode"
 
-compile :: Text -> Code -> App Text
+compile :: Text -> Code -> Spec FilePath
 compile name code = 
   let
-    onFailure :: String -> App Text
-    onFailure err =
-      let x = unpack name
-      in do
-        lift . putStrLn $ "Error compiling contract " ++ x
-        lift . putStrLn $ "The command output was: " ++ err
-        lift $ writeFile (x ++ "-dump.sol") (unpack code)
-        lift . putStrLn $ "Contract code dumped to: " ++ x ++ "-dump.sol"
-        -- lift . putStrLn $ "Command output: " ++ output
-        fail $ "Error compiling contract: " ++ err
-
     heading = T.concat ["======= <stdin>:", name, " ======="]
+    solTemp = tmpContractDir ++ "/" ++ (unpack name) ++ ".sol"
+    evmTemp = tmpBytecodeDir ++ "/" ++ (unpack name) ++ ".bin"
+  in do
+    safeIO $ ensureDirectory tmpContractDir
+    safeIO $ ensureDirectory tmpBytecodeDir
 
-  in recoverWith onFailure $ do
-    (ret, out) <- silent
-      $ do out <- (return code) -|- Sh.run "solc" ["--bin-runtime"]
-           ret <- Sh.lastExitCode
-           err <- Sh.lastStderr
-           return (ret, T.append out err)
-    case ret of
-      0 -> return . (!! 2) . T.lines . snd $ T.breakOn heading out
-      _ -> fail $ unpack out
+    safeIO $ writeFile solTemp (unpack code)
+    output <- safeShell "solc" ["--bin-runtime"] (Just code)
+    let bytecode = (T.lines . snd $ T.breakOn heading output) !! 2
+    safeIO $ writeFile evmTemp (unpack bytecode)
+    return evmTemp
 
-run :: Text -> Text -> App Text
-run code input = do
-  result <- silent $ Sh.run "evm" ["--code", code, "--input", input, "run"]
-  if T.isInfixOf "error" result
-  then fail . show $ T.append "Error running EVM: " result
-  else return result
+runEVM :: FilePath -> Text -> Spec Text
+runEVM inputFile callData =
+  safeShell "evm" ["--codefile", pack inputFile, "--input", callData, "run"] Nothing
 
 callDataWithBytes :: Text -> Text -> Text
 callDataWithBytes name bs =
   let
     method = methodID name ["bytes"]
     loc    = padWordL "20"
-    len    = padWordL . pack $ show ((T.length bs) `div` 2)
+    len    = pack . printf "%064x" $ (T.length bs `div` 2)
   in
     T.concat [method, loc, len, padWordR bs]
 

@@ -18,12 +18,11 @@ import Util
 decoderName :: Field -> Name
 decoderName fld =
   let
-    name = formatFieldType Quote fld
+    enc = formatEncoding $ fieldType fld
   in
     case fieldType fld of
-      LenDelim (Message (User name lib)) -> "_decode__"        <> name
-      LenDelim (Message (Sol name))      -> "_pb._decode_sol_" <> name
-      _                                  -> "_pb._decode_"     <> name
+      LenDelim (Message (User name lib)) -> "_decode__"        <> enc
+      _                                  -> "_pb._decode_"     <> enc
 
 generate :: Struct -> Code
 generate struct@(Struct name fields) = 
@@ -61,12 +60,12 @@ generateMainDecoder name =
     format tmpl [("name", name)]
 
 generateInnerDecoder :: Struct -> Code
-generateInnerDecoder (Struct name fields) =
+generateInnerDecoder struct =
   let
     tmpl = pack
        $ "  function _decode(uint p, bytes bs, uint sz)                   \n"
-      ++ "      internal constant returns ($name, uint) {                 \n"
-      ++ "    $name memory r;                                             \n"
+      ++ "      internal constant returns ($struct, uint) {               \n"
+      ++ "    $struct memory r;                                           \n"
       ++ "    uint[$n] memory counters;                                   \n"
       ++ "    uint fieldId;                                               \n"
       ++ "    _pb.WireType wireType;                                      \n"
@@ -92,18 +91,18 @@ generateInnerDecoder (Struct name fields) =
     fieldHandler firstPass fld =
       let
         tmpl = pack
-           $ "      else if(fieldId == $id)         \n"
-          ++ "        p += _read_$k($args);         \n"
+           $ "      else if(fieldId == $id)             \n"
+          ++ "        p += _read_$field($args);         \n"
 
         args = case (fieldLabel fld, firstPass) of
-          (Repeated, True)  -> "p, bs, wireType, nil(), counters"
-          (Repeated, False) -> "p, bs, wireType, r, counters"
-          (_       , True)  -> "p, bs, wireType, r, counters"
-          (_       , False) -> "p, bs, wireType, nil(), counters"
+          (Repeated, True)  -> "p, bs, nil(), counters"
+          (Repeated, False) -> "p, bs, r, counters"
+          (_       , True)  -> "p, bs, r, counters"
+          (_       , False) -> "p, bs, nil(), counters"
 
         ctx =
           [ ("id",     show' $ fieldID fld)
-          , ("k",      show' $ fieldName fld)
+          , ("field",  fieldName fld)
           , ("args",   args)
           ]
       in
@@ -113,12 +112,12 @@ generateInnerDecoder (Struct name fields) =
     arrayAllocator :: Field -> Code
     arrayAllocator fld = 
       let
-        tmpl = "    r.$name = new $typ(counters[$i]);"
+        tmpl = "    r.$field = new $typ(counters[$i]);"
       in
        format tmpl
-         [ ("name", name)
-         , ("typ",  formatFieldType Normal fld)
-         , ("i",    show' $ fieldID fld)
+         [ ("field", fieldName fld)
+         , ("typ",   formatFieldType Normal fld)
+         , ("i",     show' $ fieldID fld - 1)
          ]
 
     -- | `handlers True` generates field handlers for the first pass
@@ -134,9 +133,11 @@ generateInnerDecoder (Struct name fields) =
       . map arrayAllocator
       . filter isRepeated
 
+    fields = structFields struct
+
   in
     format tmpl
-      [ ("name",       name)
+      [ ("struct",     structName struct)
       , ("n",          show' $ length fields)
       , ("firstPass",  handlers True fields)
       , ("secondPass", handlers False fields)
@@ -151,13 +152,13 @@ generateStructDecoders =
     structDecoder typ =
       let
         tmpl = pack
-           $ "  function _decode__$name(uint p, bytes bs, _pb.WireType wt) \n"
-          ++ "      internal constant returns ($typ, uint) {               \n"
-          ++ "    var (sz, bytesRead) = _pb._decode_varint(p, bs);         \n"
-          ++ "    p += bytesRead;                                          \n"
-          ++ "    var (r,) = $lib._decode(p, bs, sz);                      \n"
-          ++ "    return (r, sz + bytesRead);                              \n"
-          ++ "  }                                                          \n"
+           $ "  function _decode__$name(uint p, bytes bs)            \n"
+          ++ "      internal constant returns ($typ, uint) {         \n"
+          ++ "    var (sz, bytesRead) = _pb._decode_varint(p, bs);   \n"
+          ++ "    p += bytesRead;                                    \n"
+          ++ "    var (r,) = $lib._decode(p, bs, sz);                \n"
+          ++ "    return (r, sz + bytesRead);                        \n"
+          ++ "  }                                                    \n"
       in
         format tmpl
           [ ("name", formatValueType Quote typ)
@@ -172,32 +173,39 @@ generateStructDecoders =
  
 -- | Generate a field reader/setter. `n` denotes total number of fields
 generateFieldReader :: Struct -> Field -> Code
-generateFieldReader (Struct name fields) fld =
+generateFieldReader struct fld =
   let
     tmpl = pack
-       $ "  function _read_$k(uint p, bytes bs, _pb.WireType wt, $msg r, uint[$n] counters) \n"
-      ++ "      internal constant returns (uint) {                                          \n"
-      ++ "    var (x, sz) = $decoder(p, bs, wt);                                            \n"
-      ++ "    if(isNil(r)) {                                                                \n" 
-      ++ "      counters[$i] += 1;                                                          \n"
-      ++ "    } else {                                                                      \n"
-      ++ "      $target = x;                                                                \n"
-      ++ "      if(counters[$i] > 0) counters[$i] -= 1;                                     \n"
-      ++ "    }                                                                             \n"
-      ++ "    return sz;                                                                    \n"
-      ++ "  }                                                                               \n"
-    target = case fieldLabel fld of
-      Repeated -> format "r.$k[ r.$k.length - counters[$i] ]" 
-                     [ ("k", fieldName fld)
-                     , ("i", show' $ fieldID fld) ]
-      _        -> "r." <> fieldName fld
+       $ "  function _read_$field(uint p, bytes bs, $typ r, uint[$n] counters) \n"
+      ++ "      internal constant returns (uint) {                             \n"
+      ++ "    var (x, sz) = $decoder(p, bs);                                   \n"
+      ++ "    if(isNil(r)) {                                                   \n" 
+      ++ "      counters[$i] += 1;                                             \n"
+      ++ "    } else {                                                         \n"
+      ++ "      r.${field}${suffix} = x;                                       \n"
+      ++ "      if(counters[$i] > 0) counters[$i] -= 1;                        \n"
+      ++ "    }                                                                \n"
+      ++ "    return sz;                                                       \n"
+      ++ "  }                                                                  \n"
+
+    suffix =
+      if
+        isRepeated fld
+      then
+        format "[ r.$field.length - counters[$i] ]" 
+          [ ("field", fieldName fld)
+          , ("i"    , show' $ fieldID fld - 1)
+          ]
+      else
+        ""
+
   in
     format tmpl   
-      [ ("k",       fieldName fld)
-      , ("i",       show' $ fieldID fld)
-      , ("n",       show' $ length fields)
-      , ("msg",     name)
+      [ ("field",   fieldName fld)
+      , ("i",       show' $ fieldID fld - 1)
+      , ("n",       show' . length $ structFields struct)
+      , ("typ",     structName struct)
       , ("decoder", decoderName fld)
-      , ("target",  target)
+      , ("suffix",  suffix)
       ]
 

@@ -68,6 +68,7 @@ test-suite solpb-test
                      , base16-bytestring
                      , bytestring
                      , cryptonite
+                     , directory
                      , hprotoc
                      , shelly
                      , text
