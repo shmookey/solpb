@@ -16,10 +16,9 @@ import qualified Generator
 
 import Util
 import Util.ReSpec
-import Util.Protobuf (hexEncode, getStruct, solpb)
+import Util.Protobuf 
 import Util.Solidity 
 import Util.TestGen
-import Gen.SolTypes (fileDescriptorProto)
 import Gen.SolTypes.SolTypes
 import Gen.Solidity.Solidity.Address
 import Gen.Solidity.Solidity.Uint
@@ -174,7 +173,7 @@ tests = spec "SolTypeSpec" 2 $
     encoded = hexEncode msg
 
   in do
-    (struct, structs) <- getStruct fileDescriptorProto "SolTypes"
+    (struct, structs) <- loadStruct "test/proto/SolTypes.proto" "SolTypes"
     libSrc            <- solpb $ Generator.generate structs
     testContractSrc   <- generateTestContract struct checks
     let code = testContractSrc <> libSrc

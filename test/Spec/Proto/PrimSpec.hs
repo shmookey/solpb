@@ -14,10 +14,9 @@ import qualified Generator
 
 import Util
 import Util.ReSpec
-import Util.Protobuf (hexEncode, getStruct, solpb)
+import Util.Protobuf
 import Util.Solidity 
 import Util.TestGen
-import Gen.Prim (fileDescriptorProto)
 import Gen.Prim.Prim
 
 
@@ -60,7 +59,7 @@ tests = spec "PrimSpec" 2 $
     encoded = hexEncode msg
 
   in do
-    (struct, structs) <- getStruct fileDescriptorProto "Prim"
+    (struct, structs) <- loadStruct "test/proto/Prim.proto" "Prim"
     libSrc            <- solpb $ Generator.generate structs
     testContractSrc   <- generateTestContract struct checks
     let code = testContractSrc <> libSrc

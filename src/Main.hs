@@ -5,6 +5,7 @@ module Main where
 import Control.Monad.Extra (unlessM)
 import Options.Applicative ((<>))
 import Data.Text (unpack)
+import Data.List (nub)
 import qualified Text.ProtocolBuffers.ProtoCompile.Parser as Parser
 import qualified Options.Applicative as Opts
 import qualified Data.ByteString.Lazy as B
@@ -24,25 +25,53 @@ readCliOpts =
     ( Opts.fullDesc
    <> Opts.header   "solpb -- protocol buffers for solidity" 
    <> Opts.progDesc "Generate solidity libraries for working with protocol buffers." )
-  where 
-    cliOpts = Options
+  where
+    addDefaults o = o
+      { optIncludeDirs = nub (".":(optIncludeDirs o))
+      }
+    cliOpts = addDefaults <$> (Options
       <$> Opts.strOption
           ( Opts.long    "out"
+         <> Opts.metavar "DIR"
          <> Opts.short   'o'
          <> Opts.value   "."
-         <> Opts.help    "Output directory" )
+         <> Opts.help    "Output directory. Default: ." )
+      <*> Opts.strOption
+          ( Opts.long    "lib-name"
+         <> Opts.metavar "NAME"
+         <> Opts.short   'l'
+         <> Opts.value   "pb"
+         <> Opts.help    "Name of package library to generate. Default: pb" )
+      <*> Opts.many (Opts.strOption
+          ( Opts.long    "include"
+         <> Opts.metavar "DIR"
+         <> Opts.short   'I'
+         <> Opts.help    "Add a directory to the search path" ))
+      <*> Opts.switch
+          ( Opts.long    "separate"
+         <> Opts.short   's'
+         <> Opts.help    "Generate separate output files for each specified input.")
       <*> Opts.strOption
           ( Opts.long    "suffix"
-         <> Opts.short   's'
+         <> Opts.metavar "NAME"
+         <> Opts.short   'S'
          <> Opts.value   "_pb"
-         <> Opts.help    "Output file name suffix" )
+         <> Opts.help    "Output filename suffix, used with --separate. Default: _pb" )
       <*> Opts.switch
-          ( Opts.long    "pragma"
-         <> Opts.short   'p'
-         <> Opts.help    "Emit solidity version pragmas in generated code" )
-      <*> Opts.some (Opts.argument Opts.str
-          ( Opts.metavar "FILE [FILES...]"
-         <> Opts.help    "Path to input file(s)" ))
+          ( Opts.long    "no-pragma"
+         <> Opts.help    "Suppress solidity version pragma in output" )
+      <*> Opts.switch
+          ( Opts.long    "no-runtime"
+         <> Opts.help    "Do not append runtime library to output files, implied by --separate" )
+      <*> Opts.switch
+          ( Opts.long    "no-combine"
+         <> Opts.help    "Do not produce a combined package library" )
+      <*> Opts.optional (Opts.strOption
+          ( Opts.long    "runtime-out"
+         <> Opts.help    "Path relative to output dir to save runtime lib, ignores --no-runtime" ))
+      <*> Opts.many (Opts.argument Opts.str
+          ( Opts.metavar "[FILES...]"
+         <> Opts.help    "Path to input file(s)" )))
 
 app :: App ()
 app = readCliOpts >>= \o ->
@@ -50,6 +79,7 @@ app = readCliOpts >>= \o ->
     inputFiles   = optInputs o
     outputDir    = optDir o
     outputSuffix = optSuffix o
+    libName      = optLibName o
 
     outputTarget :: String -> FilePath
     outputTarget baseName = FilePath.combine outputDir fullName
@@ -61,19 +91,39 @@ app = readCliOpts >>= \o ->
         name   = FilePath.takeBaseName path
         target = outputTarget name
       in do
-        txt     <- lift $ B.readFile path
-        protos  <- mapEither show $ Parser.parseProto name txt
-        structs <- Convert.collect protos
+        structs <- Convert.load path
+        code    <- Generator.generate structs
+        lift $ writeFile target (unpack code)
+
+    processAllFiles :: [FilePath] -> App ()
+    processAllFiles paths = 
+      let
+        target = FilePath.combine outputDir (libName ++ ".sol")
+      in do
+        structs <- Convert.loadMany paths
         code    <- Generator.generate structs
         lift $ writeFile target (unpack code)
 
   in do
+    setConfig o
     lift $ ensureDirectory outputDir
-    mapM_ processFile inputFiles
+
+    if
+      optSeparate o
+    then
+      mapM_ processFile inputFiles
+    else
+      processAllFiles inputFiles
+
+    case optRuntimeOut o of
+      Just path -> safeIO $ 
+        writeFile (FilePath.combine outputDir path) 
+                  (unpack Generator.generateRuntimeLibrary)
+      Nothing -> return ()
 
 main :: IO ()
 main = do
-  (_, r) <- runResultantT app ()
+  (_, r) <- runResultantT app initState
   case r of
     Ok xs -> return ()
     Err e -> putStrLn $ "Error: " ++ e

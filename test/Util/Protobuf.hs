@@ -22,6 +22,15 @@ import qualified Convert
 hexEncode :: (ReflectDescriptor msg, Wire msg) => msg -> Text
 hexEncode = T.pack . B8.unpack . B16.encode . BL.toStrict . messagePut
 
+loadStruct :: FilePath -> Name -> Spec (Struct, [Struct])
+loadStruct path name = do
+  structs <- solpb $ Convert.load path
+  let xs = filter ((==) name . structName) structs
+  case xs of
+    (x:[]) -> return (x, structs)
+    []     -> fail $ "couldn't find metadata for message type: " ++ (unpack name)
+    _      -> fail $ "ambiguous message type: " ++ (unpack name) 
+
 getStruct :: FDP.FileDescriptorProto -> Name -> Spec (Struct, [Struct])
 getStruct fdp name = do
   structs <- solpb $ Convert.collect fdp
@@ -32,7 +41,14 @@ getStruct fdp name = do
     _      -> fail $ "ambiguous message type: " ++ (unpack name) 
 
 solpb :: App a -> Spec a
-solpb m = do
-  (_, r) <- safeIO $ runResultantT m ()
-  point r
+solpb m = 
+  let
+    state = PB.initState 
+      { PB.optIncludeDirs = [".", "test/proto", "lib/proto"] 
+      , PB.optNoCombine   = True
+      , PB.optNoPragma    = True
+      }
+  in do
+    (_, r) <- safeIO $ runResultantT m state
+    point r
 

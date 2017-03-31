@@ -11,10 +11,9 @@ import Control.Monad.Resultant
 import qualified Generator
 
 import Util.ReSpec
-import Util.Protobuf (hexEncode, getStruct, solpb)
+import Util.Protobuf
 import Util.Solidity
 import Util.TestGen 
-import Gen.Simple (fileDescriptorProto)
 import Gen.Simple.Simple
 
 
@@ -34,7 +33,7 @@ tests = spec "SimpleSpec" 2 $
     encoded = hexEncode msg
 
   in do
-    (struct, structs) <- getStruct fileDescriptorProto "Simple"
+    (struct, structs) <- loadStruct "test/proto/Simple.proto" "Simple"
     libSrc            <- solpb $ Generator.generate structs
     testContractSrc   <- generateTestContract struct checks
     contract          <- compile "SimpleSpec" $ testContractSrc <> libSrc

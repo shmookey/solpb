@@ -4,7 +4,7 @@ module Convert where
 
 import Prelude hiding (fail)
 import Data.Foldable (toList)
-import Data.List (intercalate, isPrefixOf)
+import Data.List (intercalate, isPrefixOf, nubBy)
 import Data.List.Split (splitOn)
 import Data.Map (Map)
 import Data.Text (pack, unpack)
@@ -22,12 +22,26 @@ import qualified Text.DescriptorProtos.FieldDescriptorProto as FDP
 import qualified Text.DescriptorProtos.DescriptorProto as DP
 import qualified Text.DescriptorProtos.FieldDescriptorProto.Type as FT
 import qualified Text.DescriptorProtos.FieldDescriptorProto.Label as FL
+import qualified Text.ProtocolBuffers.ProtoCompile.Resolve as Resolve
 
 import Control.Monad.Result
 import Control.Monad.Resultant
 
 import Types
 
+
+loadMany :: [FilePath] -> App [Struct]
+loadMany paths =
+  nubBy (\a -> (==) (structName a) . structName) . concat <$> mapM load paths
+
+load :: FilePath -> App [Struct]
+load path =
+  let
+    path' = Resolve.LocalFP path
+  in do
+    dirs <- map Resolve.LocalFP . optIncludeDirs <$> getConfig
+    fdps <- safeIO (snd <$> Resolve.loadProto dirs path')
+    concat <$> mapM collect fdps
 
 collect :: FileDescriptorProto -> App [Struct]
 collect (FileDescriptorProto {message_type}) =

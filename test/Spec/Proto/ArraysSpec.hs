@@ -14,10 +14,9 @@ import Control.Monad.Resultant
 import qualified Generator
 
 import Util.ReSpec
-import Util.Protobuf (hexEncode, getStruct, solpb)
+import Util.Protobuf 
 import Util.Solidity
 import Util.TestGen 
-import Gen.Arrays (fileDescriptorProto)
 import Gen.Arrays.Arrays
 
 
@@ -37,7 +36,7 @@ tests = spec "ArraysSpec" 2 $
     encoded = hexEncode msg
 
   in do
-    (struct, structs) <- getStruct fileDescriptorProto "Arrays"
+    (struct, structs) <- loadStruct "test/proto/Arrays.proto" "Arrays"
     libSrc            <- solpb $ Generator.generate structs
     testContractSrc   <- generateTestContract struct checks
     contract          <- compile "ArraysSpec" $ testContractSrc <> libSrc

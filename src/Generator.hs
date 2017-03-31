@@ -16,53 +16,82 @@ import qualified Library
 import qualified Build
 
 
+banner = pack
+  $  "                                                                        \n"
+ ++  "//----------------------------------------------------------------------\n"
+ ++  "// AUTO-GENERATED FILE - DO NOT EDIT                                    \n"
+ ++  "//                                                                      \n"
+ ++  "// This file was generated automatically by solpb from data structures  \n"
+ ++  "// defined elsewhere. Instead of editing this file, consider modifying  \n"
+ ++  "// the source schema or writing a separate library.                     \n" 
+ ++  "//                                                                      \n"
+ ++  "// solpb is a free and open-source implementation of protocol buffers   \n"
+ ++  "// for Solidity. Protocol buffers are an efficient serialisation format \n"
+ ++  "// for structured data developed by Google. More information about this \n"
+ ++  "// project is available from the repository page:                       \n"
+ ++  "//                                                                      \n"
+ ++  "//   http://github.com/CBAInnovationLab/protobuf-solidity               \n"
+ ++  "//                                                                      \n"
+ ++  "// Further information about protocol buffers, including tutorials and  \n"
+ ++  "// downloads for implementations in most major languages is available at\n"
+ ++  "// the protocol buffers website:                                        \n"
+ ++  "//                                                                      \n"
+ ++  "//   https://developers.google.com/protocol-buffers/                    \n"
+ ++  "//                                                                      \n"
+ ++  "//  Development of solpb is proudly sponsored by the Innovation Lab at  \n"
+ ++  "//  the Commonwealth Bank of Australia.                                 \n"
+ ++  "//----------------------------------------------------------------------\n"
+ ++  "                                                                        \n"
+
 generate :: [Struct] -> App Code
 generate structs =
   let
     tmpl = pack
-       $  "pragma solidity $solidityVersion;                                       \n"
-      ++  "                                                                        \n"
-      ++  "// AUTO-GENERATED FILE - DO NOT EDIT                                    \n"
-      ++  "//                                                                      \n"
-      ++  "// This file was generated automatically by solpb from data structures  \n"
-      ++  "// defined elsewhere. Instead of editing this file, consider modifying  \n"
-      ++  "// the source schema or writing a separate library.                     \n" 
-      ++  "//                                                                      \n"
-      ++  "// solpb is a free and open-source implementation of protocol buffers   \n"
-      ++  "// for Solidity. Protocol buffers are an efficient serialisation format \n"
-      ++  "// for structured data developed by Google. More information about this \n"
-      ++  "// project is available from the repository page:                       \n"
-      ++  "//                                                                      \n"
-      ++  "//   http://github.com/CBAInnovationLab/protobuf-solidity               \n"
-      ++  "//                                                                      \n"
-      ++  "// Further information about protocol buffers, including tutorials and  \n"
-      ++  "// downloads for implementations in most major languages is available at\n"
-      ++  "// the protocol buffers website:                                        \n"
-      ++  "//                                                                      \n"
-      ++  "//   https://developers.google.com/protocol-buffers/                    \n"
-      ++  "//                                                                      \n"
-      ++  "//  Development of solpb is proudly sponsored by the Innovation Lab at  \n"
-      ++  "//  the Commonwealth Bank of Australia.                                 \n"
-      ++  "                                                                        \n"
-      ++  "$frontendLibrary                                                        \n"
+       $  "$versionPragma                                                          \n"
+      ++  "$banner                                                                 \n"
+      ++  "$packageLibrary                                                         \n"
       ++  "$codecLibraries                                                         \n"
       ++  "$runtimeLibrary                                                         \n"
       ++  "                                                                        \n"
   in do
     codecLibraries <- T.concat <$> mapM Library.generate structs
-    
+    noPragma       <- optNoPragma <$> getConfig
+    libName        <- pack . optLibName <$> getConfig  
+    separate       <- optSeparate <$> getConfig
+    noRuntime      <- optNoRuntime <$> getConfig
+    noCombine      <- optNoCombine <$> getConfig
+    versionPragma  <- generateVersionPragma
+
+    let runtimeLibrary = if noRuntime || separate 
+                         then ""
+                         else generateRuntimeLibrary
+
+    packageLibrary    <- if noCombine
+                         then return ""
+                         else generatePackageLibrary libName structs
+ 
     return . stripLineEndings $ format tmpl
-      [ ("solidityVersion",  "^0.4.0")
+      [ ("versionPragma",    strip versionPragma)
+      , ("banner",           banner)
       , ("codecLibraries",   strip codecLibraries)
-      , ("runtimeLibrary",   $(Build.pbLibrary))
-      , ("frontendLibrary",  strip $ generateFrontend "Types" structs)
+      , ("runtimeLibrary",   strip runtimeLibrary)
+      , ("packageLibrary",   strip packageLibrary)
       ]
 
-generateFrontend :: Name -> [Struct] -> Code
-generateFrontend name structs =
+generateRuntimeLibrary :: Code
+generateRuntimeLibrary = $(Build.pbLibrary)
+
+generateVersionPragma :: App Code
+generateVersionPragma = (optNoPragma <$> getConfig) >>= \noPragma -> return $
+  if noPragma then pack "" else "pragma solidity ^0.4.0;"
+
+generatePackageLibrary :: Name -> [Struct] -> App Code
+generatePackageLibrary name structs = getConfig >>= \config ->
   let
     tmpl = pack
-       $ "library $name {               \n"
+       $ "$versionPragma                \n"
+      ++ "$banner                       \n"
+      ++ "library $name {               \n"
       ++ "  $structDefs                 \n"
       ++ "  $delegators                 \n"
       ++ "}                             \n"
@@ -99,10 +128,14 @@ generateFrontend name structs =
           ]
     
     structDefs = T.concat $ map (Library.structDefinition False) structs
-  in
-    format tmpl
-      [ ("name",       name)
-      , ("structDefs", strip structDefs)
-      , ("delegators", strip . mconcat $ map makeDelegators structs)
+    bannerText = if optSeparate config then banner else ""
+  in do
+    pragma <- generateVersionPragma
+    return $ format tmpl
+      [ ("name",          name)
+      , ("banner",        bannerText)
+      , ("versionPragma", if optSeparate config then pragma else "")
+      , ("structDefs",    strip structDefs)
+      , ("delegators",    strip . mconcat $ map makeDelegators structs)
       ]
 

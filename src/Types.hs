@@ -11,7 +11,7 @@ import qualified Data.Text as T
 import Control.Monad.Resultant
 
 
-type App = ResultantT IO () String
+type App = ResultantT IO Options String
 
 type Name  = Text
 type Code  = Text
@@ -33,13 +33,6 @@ data Struct = Struct
   { structName   :: Name
   , structFields :: [Field]
   }
-
-data Options = Options
-  { optDir    :: FilePath
-  , optSuffix :: String
-  , optPragma :: Bool
-  , optInputs :: [FilePath]
-  } deriving (Show)
 
 data ValueType
   = VarintType   VarintType
@@ -179,4 +172,41 @@ isStruct :: Field -> Bool
 isStruct fld = case fieldType fld of
   LenDelim (Message (User _ _)) -> True
   _                             -> False
+
+
+-- Config state
+-- ---------------------------------------------------------------------
+
+data Options = Options
+  { optDir         :: FilePath
+  , optLibName     :: String
+  , optIncludeDirs :: [FilePath]
+  , optSeparate    :: Bool
+  , optSuffix      :: String
+  , optNoPragma    :: Bool
+  , optNoRuntime   :: Bool
+  , optNoCombine   :: Bool
+  , optRuntimeOut  :: Maybe FilePath
+  , optInputs      :: [FilePath]
+  } deriving (Show)
+
+initState :: Options
+initState = Options
+  { optDir         = "."
+  , optLibName     = "pb"
+  , optIncludeDirs = ["."]
+  , optSeparate    = False
+  , optSuffix      = "_pb"
+  , optNoPragma    = False
+  , optNoRuntime   = False
+  , optNoCombine   = False
+  , optRuntimeOut  = Nothing
+  , optInputs      = []
+  }
+
+getConfig :: App Options
+getConfig = getState
+
+setConfig :: Options -> App ()
+setConfig = setState
 
