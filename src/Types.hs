@@ -81,9 +81,9 @@ formatValueType ctx typ =
   let
     formatMessageType :: Message -> Name
     formatMessageType msg = case (msg, ctx) of
-      (User name lib, Quote) -> lib <> "_" <> name
+      (User name _,   Quote) -> name
       (User name lib, _)     -> lib <> "." <> name
-      (Sol name, _)          -> name
+      (Sol name,      _)     -> name
 
   in case typ of
     VarintType x -> case x of
