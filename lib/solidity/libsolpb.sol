@@ -328,7 +328,7 @@ library _pb {
 
   // Soltype extensions
 
-  function _decode_sol_bytesN(uint8 n, uint p, bytes bs) internal constant returns (bytes32, uint) {
+  function _decode_sol_bytesN_lower(uint8 n, uint p, bytes bs) internal constant returns (bytes32, uint) {
     uint r;
     var (len, sz) = _decode_varint(p, bs);
     if (len + sz != n + 3) throw;
@@ -338,9 +338,19 @@ library _pb {
       r /= 256;
     return (bytes32(r), n + 3);
   }
+  function _decode_sol_bytesN(uint8 n, uint p, bytes bs) internal constant returns (bytes32, uint) {
+    var (len, sz) = _decode_varint(p, bs);
+    if (len + sz != n + 3) throw;
+    p += 3;
+    bytes32 acc;
+    assembly {
+      acc := mload(add(p, bs))
+    }
+    return (acc, n + 3);
+  }
 
   function _decode_sol_address(uint p, bytes bs) internal constant returns (address, uint) {
-    var (r, sz) = _decode_sol_bytesN(20, p, bs);
+    var (r, sz) = _decode_sol_bytesN_lower(20, p, bs);
     return (address(r), sz);
   }
 
@@ -355,7 +365,7 @@ library _pb {
   }
 
   function _decode_sol_uintN(uint8 n, uint p, bytes bs) internal constant returns (uint, uint) {
-    var (u, sz) = _decode_sol_bytesN(n, p, bs);
+    var (u, sz) = _decode_sol_bytesN_lower(n, p, bs);
     uint r; assembly { r := u }
     return (r, sz);
   }
@@ -395,7 +405,7 @@ library _pb {
   }
 
   function _decode_sol_intN(uint8 n, uint p, bytes bs) internal constant returns (int, uint) {
-    var (u, sz) = _decode_sol_bytesN(n, p, bs);
+    var (u, sz) = _decode_sol_bytesN_lower(n, p, bs);
     int r; assembly { r := u }
     return (r, sz);
   }
@@ -452,7 +462,7 @@ library _pb {
 
   function _decode_sol_bytes5(uint p, bytes bs) internal constant returns (bytes5, uint) {
     var (r, sz) = _decode_sol_bytesN(5, p, bs);
-    return (bytes5(5), sz);
+    return (bytes5(r), sz);
   }
 
   function _decode_sol_bytes6(uint p, bytes bs) internal constant returns (bytes6, uint) {
@@ -502,7 +512,7 @@ library _pb {
 
   function _decode_sol_bytes15(uint p, bytes bs) internal constant returns (bytes15, uint) {
     var (r, sz) = _decode_sol_bytesN(15, p, bs);
-    return (bytes15(15), sz);
+    return (bytes15(r), sz);
   }
 
   function _decode_sol_bytes16(uint p, bytes bs) internal constant returns (bytes16, uint) {
@@ -552,7 +562,7 @@ library _pb {
 
   function _decode_sol_bytes25(uint p, bytes bs) internal constant returns (bytes25, uint) {
     var (r, sz) = _decode_sol_bytesN(25, p, bs);
-    return (bytes25(15), sz);
+    return (bytes25(r), sz);
   }
 
   function _decode_sol_bytes26(uint p, bytes bs) internal constant returns (bytes26, uint) {
@@ -587,6 +597,200 @@ library _pb {
 
   function _decode_sol_bytes32(uint p, bytes bs) internal constant returns (bytes32, uint) {
     return _decode_sol_bytesN(32, p, bs);
+  }
+
+  function _encode_sol_address(address x, uint p, bytes bs) internal constant returns (uint) {
+    return _encode_sol(uint(x), 20, p, bs);
+  }
+  function _encode_sol_uint(uint x, uint p, bytes bs) internal constant returns (uint) {
+    return _encode_sol(x, 32, p, bs);
+  }
+  function _encode_sol_uint256(uint256 x, uint p, bytes bs) internal constant returns (uint) {
+    return _encode_sol(x, 32, p, bs);
+  }
+  function _encode_sol_uint128(uint128 x, uint p, bytes bs) internal constant returns (uint) {
+    return _encode_sol(x, 16, p, bs);
+  }
+  function _encode_sol_uint64(uint64 x, uint p, bytes bs) internal constant returns (uint) {
+    return _encode_sol(x, 8, p, bs);
+  }
+  function _encode_sol_uint32(uint32 x, uint p, bytes bs) internal constant returns (uint) {
+    return _encode_sol(x, 4, p, bs);
+  }
+  function _encode_sol_uint16(uint16 x, uint p, bytes bs) internal constant returns (uint) {
+    return _encode_sol(x, 2, p, bs);
+  }
+  function _encode_sol_uint8(uint8 x, uint p, bytes bs) internal constant returns (uint) {
+    return _encode_sol(x, 1, p, bs);
+  }
+  function _encode_sol_int(int x, uint p, bytes bs) internal constant returns (uint) {
+    return _encode_sol(_twos_complement_256(x), 32, p, bs);
+  }
+  function _encode_sol_int256(int256 x, uint p, bytes bs) internal constant returns (uint) {
+    return _encode_sol(_twos_complement_256(x), 32, p, bs);
+  }
+  function _encode_sol_int128(int128 x, uint p, bytes bs) internal constant returns (uint) {
+    return _encode_sol(_twos_complement_128(x), 16, p, bs);
+  }
+  function _encode_sol_int64(int64 x, uint p, bytes bs) internal constant returns (uint) {
+    return _encode_sol(_twos_complement_64(x), 8, p, bs);
+  }
+  function _encode_sol_int32(int32 x, uint p, bytes bs) internal constant returns (uint) {
+    return _encode_sol(_twos_complement_32(x), 4, p, bs);
+  }
+  function _encode_sol_int16(int16 x, uint p, bytes bs) internal constant returns (uint) {
+    return _encode_sol(_twos_complement_16(x), 2, p, bs);
+  }
+  function _encode_sol_int8(int8 x, uint p, bytes bs) internal constant returns (uint) {
+    return _encode_sol(_twos_complement_8(x), 1, p, bs);
+  }
+  function _encode_sol_bytes1(bytes1 x, uint p, bytes bs) internal constant returns (uint) {
+    return _encode_sol(uint(x), 1, p, bs);
+  }
+  function _encode_sol_bytes2(bytes2 x, uint p, bytes bs) internal constant returns (uint) {
+    return _encode_sol(uint(x), 2, p, bs);
+  }
+  function _encode_sol_bytes3(bytes3 x, uint p, bytes bs) internal constant returns (uint) {
+    return _encode_sol(uint(x), 3, p, bs);
+  }
+  function _encode_sol_bytes4(bytes4 x, uint p, bytes bs) internal constant returns (uint) {
+    return _encode_sol(uint(x), 4, p, bs);
+  }
+  function _encode_sol_bytes5(bytes5 x, uint p, bytes bs) internal constant returns (uint) {
+    return _encode_sol(uint(x), 5, p, bs);
+  }
+  function _encode_sol_bytes6(bytes6 x, uint p, bytes bs) internal constant returns (uint) {
+    return _encode_sol(uint(x), 6, p, bs);
+  }
+  function _encode_sol_bytes7(bytes7 x, uint p, bytes bs) internal constant returns (uint) {
+    return _encode_sol(uint(x), 7, p, bs);
+  }
+  function _encode_sol_bytes8(bytes8 x, uint p, bytes bs) internal constant returns (uint) {
+    return _encode_sol(uint(x), 8, p, bs);
+  }
+  function _encode_sol_bytes9(bytes9 x, uint p, bytes bs) internal constant returns (uint) {
+    return _encode_sol(uint(x), 9, p, bs);
+  }
+  function _encode_sol_bytes10(bytes10 x, uint p, bytes bs) internal constant returns (uint) {
+    return _encode_sol(uint(x), 10, p, bs);
+  }
+  function _encode_sol_bytes11(bytes11 x, uint p, bytes bs) internal constant returns (uint) {
+    return _encode_sol(uint(x), 11, p, bs);
+  }
+  function _encode_sol_bytes12(bytes12 x, uint p, bytes bs) internal constant returns (uint) {
+    return _encode_sol(uint(x), 12, p, bs);
+  }
+  function _encode_sol_bytes13(bytes13 x, uint p, bytes bs) internal constant returns (uint) {
+    return _encode_sol(uint(x), 13, p, bs);
+  }
+  function _encode_sol_bytes14(bytes14 x, uint p, bytes bs) internal constant returns (uint) {
+    return _encode_sol(uint(x), 14, p, bs);
+  }
+  function _encode_sol_bytes15(bytes15 x, uint p, bytes bs) internal constant returns (uint) {
+    return _encode_sol(uint(x), 15, p, bs);
+  }
+  function _encode_sol_bytes16(bytes16 x, uint p, bytes bs) internal constant returns (uint) {
+    return _encode_sol(uint(x), 16, p, bs);
+  }
+  function _encode_sol_bytes17(bytes17 x, uint p, bytes bs) internal constant returns (uint) {
+    return _encode_sol(uint(x), 17, p, bs);
+  }
+  function _encode_sol_bytes18(bytes18 x, uint p, bytes bs) internal constant returns (uint) {
+    return _encode_sol(uint(x), 18, p, bs);
+  }
+  function _encode_sol_bytes19(bytes19 x, uint p, bytes bs) internal constant returns (uint) {
+    return _encode_sol(uint(x), 19, p, bs);
+  }
+  function _encode_sol_bytes20(bytes20 x, uint p, bytes bs) internal constant returns (uint) {
+    return _encode_sol(uint(x), 20, p, bs);
+  }
+  function _encode_sol_bytes21(bytes21 x, uint p, bytes bs) internal constant returns (uint) {
+    return _encode_sol(uint(x), 21, p, bs);
+  }
+  function _encode_sol_bytes22(bytes22 x, uint p, bytes bs) internal constant returns (uint) {
+    return _encode_sol(uint(x), 22, p, bs);
+  }
+  function _encode_sol_bytes23(bytes23 x, uint p, bytes bs) internal constant returns (uint) {
+    return _encode_sol(uint(x), 23, p, bs);
+  }
+  function _encode_sol_bytes24(bytes24 x, uint p, bytes bs) internal constant returns (uint) {
+    return _encode_sol(uint(x), 24, p, bs);
+  }
+  function _encode_sol_bytes25(bytes25 x, uint p, bytes bs) internal constant returns (uint) {
+    return _encode_sol(uint(x), 25, p, bs);
+  }
+  function _encode_sol_bytes26(bytes26 x, uint p, bytes bs) internal constant returns (uint) {
+    return _encode_sol(uint(x), 26, p, bs);
+  }
+  function _encode_sol_bytes27(bytes27 x, uint p, bytes bs) internal constant returns (uint) {
+    return _encode_sol(uint(x), 27, p, bs);
+  }
+  function _encode_sol_bytes28(bytes28 x, uint p, bytes bs) internal constant returns (uint) {
+    return _encode_sol(uint(x), 28, p, bs);
+  }
+  function _encode_sol_bytes29(bytes29 x, uint p, bytes bs) internal constant returns (uint) {
+    return _encode_sol(uint(x), 29, p, bs);
+  }
+  function _encode_sol_bytes30(bytes30 x, uint p, bytes bs) internal constant returns (uint) {
+    return _encode_sol(uint(x), 30, p, bs);
+  }
+  function _encode_sol_bytes31(bytes31 x, uint p, bytes bs) internal constant returns (uint) {
+    return _encode_sol(uint(x), 31, p, bs);
+  }
+  function _encode_sol_bytes32(bytes32 x, uint p, bytes bs) internal constant returns (uint) {
+    return _encode_sol(uint(x), 32, p, bs);
+  }
+
+  function _encode_sol_header(uint sz, uint p, bytes bs) internal constant returns (uint) {
+    uint offset = p;
+    p += _encode_varint(sz + 2, p, bs); // length of (payload + 1b key + 1b inner length)
+    p += _encode_key(1, WireType.LengthDelim, p, bs);
+    p += _encode_varint(sz, p, bs);
+    return p - offset;
+  }
+  function _encode_sol(uint x, uint sz, uint p, bytes bs) internal constant returns (uint) {
+    uint offset = p;
+    p += _encode_sol_header(sz, p, bs);
+    p += _encode_sol_raw(x, p, bs, sz);
+    return p - offset;
+  }
+  function _encode_sol_raw(uint x, uint p, bytes bs, uint sz) internal constant returns (uint) {
+    assembly {
+      let bsptr := add(bs, p)
+      let count := sz
+      loop:
+        jumpi(end, eq(count, 0))
+        mstore8(bsptr, byte(sub(32, count), x))
+        bsptr := add(bsptr, 1)
+        count := sub(count, 1)
+        jump(loop)
+      end:
+    }
+    return sz;
+  }
+  function _twos_complement_256(int256 x) internal constant returns (uint256) {
+    uint256 r; assembly { r := x }
+    return r;
+  }
+  function _twos_complement_128(int128 x) internal constant returns (uint128) {
+    uint128 r; assembly { r := x }
+    return r;
+  }
+  function _twos_complement_64(int64 x) internal constant returns (uint64) {
+    uint64 r; assembly { r := x }
+    return r;
+  }
+  function _twos_complement_32(int32 x) internal constant returns (uint32) {
+    uint32 r; assembly { r := x }
+    return r;
+  }
+  function _twos_complement_16(int16 x) internal constant returns (uint16) {
+    uint16 r; assembly { r := x }
+    return r;
+  }
+  function _twos_complement_8(int8 x) internal constant returns (uint8) {
+    uint8 r; assembly { r := x }
+    return r;
   }
 
 }

@@ -9,6 +9,7 @@ message solidity {
   message uint64  { required bytes data = 1; }
   message uint128 { required bytes data = 1; }
   message uint256 { required bytes data = 1; }
+  message int     { required bytes data = 1; }
   message int8    { required bytes data = 1; }
   message int16   { required bytes data = 1; }
   message int32   { required bytes data = 1; }

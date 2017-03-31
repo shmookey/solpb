@@ -28,6 +28,7 @@ data Value
   | Bytes ByteString 
   | IntList String [Integer]
   | BytesList [ByteString]
+  | SolType String String
 
 generateTestContract :: Struct -> [(Name, Value)] -> Spec Code
 generateTestContract (Struct name fields) checks =
@@ -51,9 +52,10 @@ generateTestContract (Struct name fields) checks =
 
     fieldCheck :: Name -> Value -> Code
     fieldCheck name value = pack $ case value of
-      Integer x  -> printf "    if(x.%s != %i) throw;    \n" name x
-      Bool False -> printf "    if(x.%s != false) throw; \n" name
-      Bool True  -> printf "    if(x.%s != true) throw;  \n" name
+      Integer x       -> printf "    if(x.%s != %i) throw;    \n" name x
+      Bool False      -> printf "    if(x.%s != false) throw; \n" name
+      Bool True       -> printf "    if(x.%s != true) throw;  \n" name
+      SolType typ val -> printf "    if(x.%s != %s) throw;    \n" name val
       String xs  -> 
         let 
           byte :: Int -> Int -> String
@@ -86,9 +88,10 @@ generateTestContract (Struct name fields) checks =
 
     fieldSet :: Name -> Value -> Code
     fieldSet name value = pack $ case value of
-      Integer x  -> printf "    x.%s = %i;    \n" name x
-      Bool False -> printf "    x.%s = false; \n" name
-      Bool True  -> printf "    x.%s = true;  \n" name
+      Integer x       -> printf "    x.%s = %i;    \n" name x
+      Bool False      -> printf "    x.%s = false; \n" name
+      Bool True       -> printf "    x.%s = true;  \n" name
+      SolType typ val -> printf "    x.%s = %s;    \n" name val
       String xs  -> 
         let 
           byte :: Int -> Int -> String

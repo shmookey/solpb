@@ -7,9 +7,11 @@ import Data.ByteString.Char8 (ByteString)
 import Data.Text (Text, pack, unpack)
 import System.Directory
 import Text.Printf (printf)
-import Data.Bits (Bits, (.|.), shiftL, shiftR)
+import Data.Bits (Bits, (.|.), complement, shiftL, shiftR)
+import Data.Bits.ByteString
 import qualified Data.ByteString.Base16 as B16
 import qualified Data.ByteString.Char8 as B8
+import qualified Data.ByteString.Lazy.Char8 as BL8
 import qualified Data.ByteString as B
 import qualified Data.Text as T
 
@@ -24,6 +26,8 @@ import Types
 
 tmpContractDir = "test/Gen/solidity"
 tmpBytecodeDir = "test/Gen/bytecode"
+
+-- todo: check for out of gas condition
 
 compile :: Text -> Code -> Spec FilePath
 compile name code = 
@@ -95,6 +99,21 @@ padWordR x =
   in
     T.append x pad
 
+padBytes :: Int -> ByteString -> ByteString
+padBytes i x =
+  if B8.length x == i
+  then
+    x
+  else
+    B8.cons '\NUL' (padBytes (i-1) x)
+--  else
+--    let
+--      sz  = B8.length x
+--      n   = i - (sz `mod` i)
+--      pad = fst . B16.decode . B8.pack . take (n*2) $ repeat '0'
+--    in
+--      B8.append pad x
+
 roll :: ByteString -> Integer
 roll = B.foldl' unstep 0
   where unstep a b = a `shiftL` 8 .|. fromIntegral b
@@ -104,4 +123,36 @@ unroll = B.reverse . B.unfoldr step
   where
     step 0 = Nothing
     step i = Just (fromIntegral i, i `shiftR` 8)
+
+-- | Fixed-preicision version of `unroll`
+funroll :: Int -> Integer -> ByteString
+funroll sz = padBytes sz . unroll
+
+-- | Signed, fixed-precision version of `unroll`
+sunroll :: Int -> Integer -> ByteString
+sunroll sz x = 
+  if 
+    x >= 0
+  then
+    padBytes sz $ unroll x
+  else
+    complement . padBytes sz . unroll $ abs x - 1
+
+fromHex :: String -> B8.ByteString
+fromHex = fst . B16.decode . B8.pack
+
+--fromHex :: String -> B8.ByteString
+--fromHex = fst . B16.decode . B8.pack
+
+-- Lazy Bytestring versions
+-- ---------------------------------------------------------------------
+
+lfunroll :: Int -> Integer -> BL8.ByteString
+lfunroll sz = BL8.fromStrict . funroll sz
+
+lsunroll :: Int -> Integer -> BL8.ByteString
+lsunroll sz = BL8.fromStrict . sunroll sz
+
+lfromHex :: String -> BL8.ByteString
+lfromHex = BL8.fromStrict . fromHex
 

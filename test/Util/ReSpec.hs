@@ -38,8 +38,10 @@ spec desc num action =
     onFail err = do
       exp <- getExpecting
       safeIO . putStrLn $ "An error occured in the setup for spec " ++ desc ++ "."
+      safeIO . putStrLn $ "The message was: " ++ err
       safeIO . putStrLn $ "The remaining " ++ (show exp) ++ " tests in this spec will be skipped."
       updateSkipped (+exp)
+      updateCount (+exp)
   in do
     setSpecName desc
     setExpecting num

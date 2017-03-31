@@ -4,7 +4,7 @@ module Convert where
 
 import Prelude hiding (fail)
 import Data.Foldable (toList)
-import Data.List (intercalate)
+import Data.List (intercalate, isPrefixOf)
 import Data.List.Split (splitOn)
 import Data.Map (Map)
 import Data.Text (pack, unpack)
@@ -55,31 +55,34 @@ create src@(DescriptorProto {field}) =
     getValueType :: FieldDescriptorProto -> App ValueType
     getValueType (FieldDescriptorProto {type', type_name}) =
       case (type', type_name) of
-        (Just FT.TYPE_UINT32,   _) -> return $ VarintType   UInt32 
-        (Just FT.TYPE_UINT64,   _) -> return $ VarintType   UInt64
-        (Just FT.TYPE_INT32,    _) -> return $ VarintType   Int32
-        (Just FT.TYPE_INT64,    _) -> return $ VarintType   Int64
-        (Just FT.TYPE_SINT32,   _) -> return $ VarintType   SInt32
-        (Just FT.TYPE_SINT64,   _) -> return $ VarintType   SInt64 
-        (Just FT.TYPE_BOOL,     _) -> return $ VarintType   Bool  
-        (Just FT.TYPE_FIXED32,  _) -> return $ Fixed32Type  Fixed32
-        (Just FT.TYPE_SFIXED32, _) -> return $ Fixed32Type  SFixed32
-        (Just FT.TYPE_FIXED64,  _) -> return $ Fixed64Type  Fixed64
-        (Just FT.TYPE_SFIXED64, _) -> return $ Fixed64Type  SFixed64
-        (Just FT.TYPE_STRING,   _) -> return $ LenDelim     String
-        (Just FT.TYPE_BYTES,    _) -> return $ LenDelim     Bytes   
-        (Nothing, Just x)          -> return $ LenDelim     (messageType $ uToString x)
-        (Just x, _)                -> fail $ "unsupported field type: " ++ (show x)
-        _                          -> fail "missing field type"
+        (Just FT.TYPE_UINT32,   _)     -> return $ VarintType   UInt32 
+        (Just FT.TYPE_UINT64,   _)     -> return $ VarintType   UInt64
+        (Just FT.TYPE_INT32,    _)     -> return $ VarintType   Int32
+        (Just FT.TYPE_INT64,    _)     -> return $ VarintType   Int64
+        (Just FT.TYPE_SINT32,   _)     -> return $ VarintType   SInt32
+        (Just FT.TYPE_SINT64,   _)     -> return $ VarintType   SInt64 
+        (Just FT.TYPE_BOOL,     _)     -> return $ VarintType   Bool  
+        (Just FT.TYPE_FIXED32,  _)     -> return $ Fixed32Type  Fixed32
+        (Just FT.TYPE_SFIXED32, _)     -> return $ Fixed32Type  SFixed32
+        (Just FT.TYPE_FIXED64,  _)     -> return $ Fixed64Type  Fixed64
+        (Just FT.TYPE_SFIXED64, _)     -> return $ Fixed64Type  SFixed64
+        (Just FT.TYPE_STRING,   _)     -> return $ LenDelim     String
+        (Just FT.TYPE_BYTES,    _)     -> return $ LenDelim     Bytes   
+        (Just FT.TYPE_MESSAGE, Just x) -> return $ LenDelim     (messageType $ uToString x)
+        (Nothing, Just x)              -> return $ LenDelim     (messageType $ uToString x)
+        (Just x, _)                    -> fail $ "unsupported field type: " ++ (show x)
+        _                              -> fail "missing field type"
 
     messageType :: String -> LenDelimType
     messageType name = 
       let
         x = pack name
       in 
-        case splitOn "." name of
-          ("solidity" : _) -> Message . Sol . pack $ drop 9 name
-          _                -> Message . User x . mappend x $ pack "Codec"
+        if isPrefixOf ".Solidity.solidity." name
+        then
+          Message . Sol . pack $ drop 19 name
+        else
+          Message . User x . mappend x $ pack "Codec"
 
     convertLabel :: FL.Label -> Label
     convertLabel x = case x of
