@@ -6,8 +6,7 @@ mkdir -p $HOME/.local/bin
 
 if [[ "$TRAVIS_OS_NAME" == "osx" ]]
 then
-  curl --insecure -L https://www.stackage.org/stack/osx-x86_64
-  tar xz --strip-components=1 --include '*/stack' -C $HOME/.local/bin
+  curl --insecure -L https://www.stackage.org/stack/osx-x86_64 | tar xz --strip-components=1 --include '*/stack' -C $HOME/.local/bin
   brew tap ethereum/ethereum
   brew install solidity
   brew linkapps solidity
@@ -16,8 +15,7 @@ fi
 if [[ "$TRAVIS_OS_NAME" == "linux" ]] 
 then
   gem install --no-ri --no-rdoc fpm
-  curl -L https://www.stackage.org/stack/linux-x86_64
-  tar xz --wildcards --strip-components=1 -C $HOME/.local/bin '*/stack'
+  curl -L https://www.stackage.org/stack/linux-x86_64 | tar xz --wildcards --strip-components=1 -C $HOME/.local/bin '*/stack'
   add-apt-repository ppa:ethereum/ethereum
   apt-get update
   apt-get install solc
