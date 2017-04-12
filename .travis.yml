@@ -22,7 +22,7 @@ install:
 - stack --no-terminal --install-ghc test --only-dependencies
 script:
 - stack --copy-bins --no-terminal build
-- stack exec hprotoc -- -I lib/proto -I test/proto -d test -p Gen Prim.proto Arrays.proto SolTypes.proto Structs.proto Simple.proto
+- stack exec hprotoc -- -I lib/proto -I test/proto -d test -p Gen Prim.proto Arrays.proto SolTypes.proto Structs.proto Simple.proto solidity.proto
 - stack test
 - git clone git@github.com:CBAInnovationLab/packages.git
 - ./packages/solpb/build.sh
