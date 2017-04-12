@@ -16,9 +16,9 @@ if [[ "$TRAVIS_OS_NAME" == "linux" ]]
 then
   gem install --no-ri --no-rdoc fpm
   curl -L https://www.stackage.org/stack/linux-x86_64 | tar xz --wildcards --strip-components=1 -C $HOME/.local/bin '*/stack'
-  add-apt-repository ppa:ethereum/ethereum
-  apt-get update
-  apt-get install solc
+  sudo add-apt-repository ppa:ethereum/ethereum
+  sudo apt-get update
+  sudo apt-get install solc
 fi
 
 curl $DEPS_URL/$TRAVIS_OS_NAME/evm -o $HOME/.local/bin/evm
