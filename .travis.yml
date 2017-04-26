@@ -13,7 +13,6 @@ addons:
     - libgmp-dev
     - ruby
     - ruby-dev
-    - rubygems
     - gcc
     - make
 before_install:
