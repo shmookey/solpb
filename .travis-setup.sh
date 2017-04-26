@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -e 
+
 DEPS_URL=https://s3-ap-southeast-2.amazonaws.com/protobuf-solidity/build-deps
 
 mkdir -p $HOME/.local/bin
