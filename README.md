@@ -42,13 +42,14 @@ Debian-based linux distributions such as Ubuntu can use the deb package:
 
 ```bash
 wget https://s3-ap-southeast-2.amazonaws.com/protobuf-solidity/packages/debian/solpb-0.5.0-linux-x86_64.deb
-dpkg -i solpb-0.1.0-linux-x86_64.deb
+dpkg -i solpb-0.5.0-linux-x86_64.deb
 ```
 
 Other users may install from the latest binary tarball:
 
 ```bash
-tar xvf solpb-0.1.0-linux.tar.gz
+wget https://s3-ap-southeast-2.amazonaws.com/protobuf-solidity/packages/tarball/solpb-0.5.0-linux-x86_64.tar.gz
+tar xvf solpb-0.5.0-linux.tar.gz
 cd solpb-0.1.0
 ./install.sh
 ```
@@ -61,5 +62,8 @@ cd protobuf-solidity
 stack setup
 stack build
 ```
+
+
+## Getting Started
 
 
