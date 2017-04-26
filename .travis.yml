@@ -17,7 +17,7 @@ addons:
     - make
 before_install:
 - export PATH=$HOME/.local/bin:$PATH
-- ./.travis-setup.sh
+- travis_wait 30 ./.travis-setup.sh
 install:
 - stack --no-terminal --install-ghc test --only-dependencies
 script:
